@@ -96,11 +96,11 @@
         "spirv-cross-src": "spirv-cross-src"
       },
       "locked": {
-        "lastModified": 1662443270,
-        "narHash": "sha256-a+1DoB8i3x9xl1rCsjhZO0yhEZPEkZgZkqJvRUgd8TY=",
+        "lastModified": 1664682446,
+        "narHash": "sha256-FLO1sSfw69igYAnGaJC9ErgLjZNIvRqxDUJfkULcANg=",
         "owner": "Fundament-software",
         "repo": "scopes",
-        "rev": "41723660fdf33ba4e4de356131665757c4213865",
+        "rev": "7cf1b1ca86d2e80d18d23ae756ef872789246a92",
         "type": "github"
       },
       "original": {
