@@ -1,5 +1,6 @@
 using import Array
 using import enum
+using import Option
 using import Rc
 using import struct
 
@@ -35,8 +36,6 @@ type RrbVector < Struct
             #tree   : (new-tree (Rc this-type) element-type)
             tree   : (FixedArray element-type node-arity)
 
-    # TODO
-    # what about not i32
     inline new (cls)
         Struct.__typecall cls
             depth = 1
@@ -49,17 +48,38 @@ type RrbVector < Struct
                 let index-in-level = ((idx >> (level * block-width)) & block-mask)
                 this-function idx (node @ index-in-level) (level - 1)
         #get-radix index self.tree self.depth
-        self.tree @ index
+        # TODO
+        # what the actual fuck
+        # tbf i kinda randomly stumbled on this
+        # also how do i make it not i32
+        if (index >= (countof self.tree))
+            let opt =
+                Option i32
+            let opt2 =
+                opt.None
+            opt2;
+        else
+            Option.wrap
+                self.tree @ index
 
 # testy testy
 do
     let rrbvector-i32 = (RrbVector i32)
     report rrbvector-i32
-    let myvector = (rrbvector-i32)
+    local myvector = (rrbvector-i32)
+    #report myvector # rip
+    report (typeof myvector)
     let mything = ('get myvector 1)
     report mything
-    # rip
-    #report myvector
+    report (typeof mything)
+    #dispatch mything
+    #case None
+        print "none"
+    #case Some
+        print "some"
+    #default
+        print "wtf"
+    report ('__tobool mything)
     ;
 
 ;
