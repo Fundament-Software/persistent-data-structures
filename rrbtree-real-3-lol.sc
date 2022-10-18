@@ -49,17 +49,13 @@ type RrbVector < Struct
                 this-function idx (node @ index-in-level) (level - 1)
         #get-radix index self.tree self.depth
         # TODO
-        # what the actual fuck
-        # tbf i kinda randomly stumbled on this
-        # also how do i make it not i32
+        # how do i make it not i32
+        let the-type = (Option i32)
         if (index >= (countof self.tree))
-            let opt =
-                Option i32
-            let opt2 =
-                opt.None
-            opt2;
+            (the-type) # None
         else
-            Option.wrap
+            # Some
+            the-type
                 self.tree @ index
 
 # testy testy
@@ -72,14 +68,13 @@ do
     let mything = ('get myvector 1)
     report mything
     report (typeof mything)
-    #dispatch mything
-    #case None
+    dispatch mything
+    case None ()
         print "none"
-    #case Some
+    case Some ()
         print "some"
-    #default
+    default
         print "wtf"
-    report ('__tobool mything)
     ;
 
 ;
