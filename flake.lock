@@ -63,16 +63,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1650998007,
-        "narHash": "sha256-NcJnbGDBBN023x8s3ll3HZxBcQoPq1ry9E2sjg+4flc=",
+        "lastModified": 1674242456,
+        "narHash": "sha256-yBy7rCH7EiBe9+CHZm9YB5ii5GRa+MOxeW0oDEBO8SE=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "a3917caedfead19f853aa5769de4c3ea4e4db584",
+        "rev": "cdead16a444a3e5de7bc9b0af8e198b11bb01804",
         "type": "github"
       },
       "original": {
         "owner": "nixos",
-        "ref": "nixos-21.11",
+        "ref": "nixos-22.11",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -96,11 +96,11 @@
         "spirv-cross-src": "spirv-cross-src"
       },
       "locked": {
-        "lastModified": 1669710431,
-        "narHash": "sha256-6VYWmzkuGGWGC/oZqTl1bSfYJ4xjnRbDAD+mgTmQCK4=",
+        "lastModified": 1674523810,
+        "narHash": "sha256-xjSPHfk3Lv1JseRIh3BdY52LyYYXDIuAMtfBdOp2Fnk=",
         "owner": "Fundament-software",
         "repo": "scopes",
-        "rev": "43bb41b279080fb2688077b5a2c6d16d4fbd09ca",
+        "rev": "e4bae70c7b6b0fbbf68bb47893fec05ed45f0c8c",
         "type": "github"
       },
       "original": {

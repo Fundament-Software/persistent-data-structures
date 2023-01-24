@@ -1,0 +1,14 @@
+rrb tree
+a tree structure suitable for implementing a vector
+sketch in figure 2 of rrbvector.pdf
+catenable: can concatenate two vectors, one with keys 0-n another with keys 0-m to a single vector with keys 0-m+n where n-m+n come from the second one's 0-m
+
+hash array mapped trie
+a prefix-tree (trie) structure suitable for implementing an associative array
+can combine two associative arrays, where each key-value from each is part of the new associative array
+
+persistent b-tree
+
+terminology
+associative array, dictionary, map, table: key-value store
+vector: key-value store but with non-negative integer keys
