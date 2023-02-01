@@ -7,6 +7,11 @@ sugar unwrap (var body...)
             default
                 unreachable;
 
+sugar let-unwrap (name var brcase param)
+    qq
+        let [name] =
+            unwrap [var] [brcase] ([param]) [param]
+
 do
-    let unwrap
+    let unwrap let-unwrap
     locals;

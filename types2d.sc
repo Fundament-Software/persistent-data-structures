@@ -54,67 +54,15 @@ case (element-type block-width)
     case (self tree length depth)
         rrb-vector tree length depth
 
-    # if we ever do append-front then this
-    # might be better named needs-new-root
-    fn is-tree-full (self)
-        self.length ==
-            node-arity-pow self.depth
-
     # __@
     fn get (self index)
         # loop instead of recursion
         loop (level node = self.depth self.tree)
-            let i =
-                index-at-level index level
+            let i = (index-at-level index level)
             if (level == 1)
-                let-unwrap data node data-node data
-                break
-                    data @ i
+                break (unwrap node data-node (data) (copy (data @ i)))
             else
-                let-unwrap ptrs node pointer-node ptrs
-                repeat
-                    level - 1
-                    deref
-                        ptrs @ i
-
-    # TODO: mutable when owned
-    # TODO: append-front???
-    # rn i'm assuming only append-back
-    fn append (self element)
-        fn append-inner (elt idx level node) (returning (uniqueof rrb-tree -1))
-            let i =
-                index-at-level idx level
-            if (level == 1)
-                let-unwrap data node data-node data
-                local new-data =
-                    copy data
-                'append new-data elt
-                rrb-tree.data-node new-data
-            else
-                let-unwrap ptrs node pointer-node ptrs
-                let new-child =
-                    this-function elt idx
-                        level - 1
-                        ptrs @ i
-                local new-ptrs =
-                    copy ptrs
-                (new-ptrs @ i) = new-child
-                rrb-tree.pointer-node new-ptrs
-        if (is-tree-full self)
-            # TODO: this
-            unreachable;
-        else
-            new-template self
-                append-inner element self.length self.depth self.tree
-                self.length + 1
-    #fn append (self element)
-        let-unwrap data self.tree data-node data
-        local new-data =
-            copy data
-        'append new-data element
-        new-template self
-            rrb-tree.data-node new-data
-            self.length + 1
+                repeat (level - 1) (unwrap node pointer-node (ptrs) ((ptrs @ i) as rrb-tree))
 
     # __repr (i think???)
     fn printify (self)
@@ -131,11 +79,56 @@ case (element-type block-width)
         s ..= " ]"
         s
 
+    # if we ever do append-front then this
+    # might be better named needs-new-root
+    fn is-tree-full (self)
+        self.length ==
+            node-arity-pow self.depth
+
+    # TODO: mutable when owned
+    # TODO: append-front???
+    # rn i'm assuming only append-back
+    fn append (self element)
+        #fn append-inner (idx level node element) (returning rrb-tree)
+            let i =
+                index-at-level idx level
+            if (level == 1)
+                unwrap node data-node (data)
+                    local new-data =
+                        copy data
+                    'append new-data element
+                    rrb-tree.data-node new-data
+            else
+                unwrap node pointer-node (ptrs)
+                    let new-child =
+                        this-function idx
+                            level - 1
+                            ptrs @ i
+                            element
+                    local new-ptrs =
+                        copy ptrs
+                    (new-ptrs @ i) = new-child
+                    rrb-tree.pointer-node new-ptrs
+        #if (is-tree-full self)
+            # TODO: this
+            unreachable;
+        #else
+            new-template self
+                append-inner self.length self.depth self.tree element
+                self.length + 1
+        unwrap self.tree data-node (data)
+            local new-data =
+                copy data
+            'append new-data element
+            new-template self
+                rrb-tree.data-node new-data
+                self.length + 1
+
     struct rrb-vector
         tree   : rrb-tree
         length : u32
         depth  : u32
-        let new get append printify
+        let new get printify append
 
 run
     let rrb-vector-i32 =
