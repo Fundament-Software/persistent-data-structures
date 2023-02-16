@@ -131,18 +131,18 @@ case (element-type block-width)
                 rrb-tree.data-node new-data
             else
                 let-unwrap ptrs node pointer-node ptrs
-                let new-child =
-                    if (needs-new-branch idx level)
+                local new-ptrs =
+                    copy ptrs
+                if (needs-new-branch idx level)
+                    'append new-ptrs
                         new-branch elt
                             level - 1
-                    else
+                else
+                    (new-ptrs @ i) =
                         this-function elt
                             ptrs @ i
                             idx
                             level - 1
-                local new-ptrs =
-                    copy ptrs
-                (new-ptrs @ i) = new-child
                 rrb-tree.pointer-node new-ptrs
         if (is-tree-full self.length self.depth)
             let new-e2 =
@@ -188,7 +188,7 @@ case (element-type block-width)
 
 run
     let rrb-vector-i32 =
-        gen-rrb-vector-type i32 3
+        gen-rrb-vector-type i32 2
     # bunch of lets to showcase persistence
     let my-thing-0 =
         rrb-vector-i32.new;
