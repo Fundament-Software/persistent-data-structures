@@ -8,10 +8,11 @@ sugar unwrap (var body...)
                 assert false "unwrap failed, PANIC!!!"
                 unreachable;
 
-sugar let-unwrap (name var brcase param)
+# TODO: more params in brcase?
+sugar let-unwrap (name var brcase)
     qq
         let [name] =
-            unwrap [var] [brcase] ([param]) [param]
+            unwrap [var] [brcase] (x) x
 
 do
     let unwrap let-unwrap
