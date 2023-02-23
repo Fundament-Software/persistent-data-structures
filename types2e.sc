@@ -73,7 +73,7 @@ type rrb-vector < Struct
     fn __@ (self index)
         let t = (typeof self)
         # loop instead of recursion
-        loop (node depth = self.tree self.depth)
+        loop (node depth = (deref self.tree) (deref self.depth))
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node data-node
@@ -98,6 +98,34 @@ type rrb-vector < Struct
                     repr (self @ i)
         s ..= " ]"
         s
+
+    fn compare-reftree (self other)
+        fn inner-compare-reftree (prefix depth nodel noder) (returning void)
+            if (depth == 0)
+                let-unwrap datal nodel data-node
+                let-unwrap datar noder data-node
+                let lenl = (countof datal)
+                let lenr = (countof datar)
+                print (.. prefix "LEAF")
+                print (.. prefix (repr (datal == datar)))
+                print (.. prefix (repr datal))
+                print (.. prefix (repr datar))
+            else
+                let-unwrap ptrsl nodel pointer-node
+                let-unwrap ptrsr noder pointer-node
+                let lenl = (countof ptrsl)
+                let lenr = (countof ptrsr)
+                print (.. prefix "NODE")
+                print (.. prefix (repr (ptrsl == ptrsr)))
+                print (.. prefix (repr ptrsl))
+                print (.. prefix (repr ptrsr))
+                let minlen = (min lenl lenr)
+                for i in (range minlen)
+                    this-function (.. prefix (tostring i) " ") (depth - 1) (ptrsl @ i) (ptrsr @ i)
+        if (self.depth != other.depth)
+            print "FIXME: implement different depths"
+        else
+            inner-compare-reftree "" self.depth self.tree other.tree
 
     # TODO: mutable when owned
     # TODO: append-front???
@@ -167,12 +195,14 @@ run
     let my-thing-4 = ('append my-thing-3 4)
     let my-thing-5 = ('append my-thing-4 5)
     let my-thing-6 = ('append my-thing-5 6)
+    'compare-reftree my-thing-5 my-thing-6
     let my-thing-7 = ('append my-thing-6 7)
     let my-thing-8 = ('append my-thing-7 8)
     let my-thing-9 = ('append my-thing-8 9)
     let my-thing-10 = ('append my-thing-9 10)
     let my-thing-11 = ('append my-thing-10 11)
     let my-thing-12 = ('append my-thing-11 12)
+    'compare-reftree my-thing-5 my-thing-6
     print (repr my-thing-0)
     print (repr my-thing-1)
     print (repr my-thing-2)
