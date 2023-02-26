@@ -1,6 +1,13 @@
+# TODO: learn how to read ownership in scopes code
+# possibly with the help of lsp type annotations
+# TODO: properly learn the usage of let/local
+# TODO: safety when making a vector with over 4 billion elements
+
 using import Array
 using import enum
 using import Rc
+# TODO: investigate correct usage of String
+using import String
 using import struct
 using import .run
 using import .unwrap
@@ -37,6 +44,8 @@ inline gen-bit-ops (block-width)
     locals;
 
 type rrb-vector < Struct
+    # FIXME: how to return a type of non-mutable data?
+    @@ memo
     inline gen-rrb-vector-type (element-type block-width)
         let bit-ops = (gen-bit-ops block-width)
 
@@ -53,8 +62,10 @@ type rrb-vector < Struct
             tree   : rrb-tree
             length : u32
             depth  : u32
+            # TODO: better way to expose all this?
             let bit-ops rrb-tree data-node-type pointer-node-type
 
+    # TODO: less jank way to do this?
     inline... __typecall
     case (cls element-type)
         this-function cls element-type 5
@@ -71,6 +82,7 @@ type rrb-vector < Struct
         Struct.__typecall cls tree length depth
 
     fn __@ (self index)
+        assert (index < self.length) "@ out of bounds!"
         let t = (typeof self)
         # loop instead of recursion
         loop (node depth = (deref self.tree) (deref self.depth))
@@ -84,54 +96,38 @@ type rrb-vector < Struct
                     deref (ptrs @ i)
                     depth - 1
 
-    fn __repr (self)
-        local s =
-            ..
-                "[count="
-                repr self.length
-                " items="
-        for i in (range self.length)
-            s =
-                ..
-                    s
-                    " "
-                    repr (self @ i)
-        s ..= " ]"
-        s
-
-    fn compare-reftree (self other)
-        fn inner-compare-reftree (prefix depth nodel noder) (returning void)
+    # TODO: is there a proper method name for this?
+    fn update (self index element)
+        assert (index < self.length) "update out of bounds!"
+        let t = (typeof self)
+        fn update-inner (node index depth element) (returning (uniqueof t.rrb-tree -1))
+            let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
-                let-unwrap datal nodel data-node
-                let-unwrap datar noder data-node
-                let lenl = (countof datal)
-                let lenr = (countof datar)
-                print (.. prefix "LEAF")
-                print (.. prefix (repr (datal == datar)))
-                print (.. prefix (repr datal))
-                print (.. prefix (repr datar))
+                let-unwrap data node data-node
+                local new-data = (copy data)
+                (new-data @ i) = element
+                t.rrb-tree.data-node new-data
             else
-                let-unwrap ptrsl nodel pointer-node
-                let-unwrap ptrsr noder pointer-node
-                let lenl = (countof ptrsl)
-                let lenr = (countof ptrsr)
-                print (.. prefix "NODE")
-                print (.. prefix (repr (ptrsl == ptrsr)))
-                print (.. prefix (repr ptrsl))
-                print (.. prefix (repr ptrsr))
-                let minlen = (min lenl lenr)
-                for i in (range minlen)
-                    this-function (.. prefix (tostring i) " ") (depth - 1) (ptrsl @ i) (ptrsr @ i)
-        if (self.depth != other.depth)
-            print "FIXME: implement different depths"
-        else
-            inner-compare-reftree "" self.depth self.tree other.tree
+                let-unwrap ptrs node pointer-node
+                local new-ptrs = (copy ptrs)
+                let branch =
+                    this-function (ptrs @ i) index (depth - 1) element
+                (new-ptrs @ i) = branch
+                t.rrb-tree.pointer-node new-ptrs
+        let tree =
+            update-inner self.tree index self.depth element
+        let length = self.length
+        let depth = self.depth
+        Struct.__typecall t tree length depth
 
     # TODO: mutable when owned
     # TODO: append-front???
     # rn i'm assuming only append-back
+    # TODO: extremely similar to update, with extra handling of edge cases
+    # refactor?
     fn append (self element)
         let t = (typeof self)
+
         # make a new branch with a given depth and given first element
         fn new-branch (depth element) (returning (uniqueof t.rrb-tree -1))
             if (depth == 0)
@@ -169,6 +165,8 @@ type rrb-vector < Struct
                     (new-ptrs @ i) = branch
                 t.rrb-tree.pointer-node new-ptrs
 
+        # if tree is full, make a new root,
+        # put tree under it and then the new element
         if (t.bit-ops.is-tree-full self.length self.depth)
             let branch = (new-branch self.depth element)
             local ptrs = (t.pointer-node-type)
@@ -184,10 +182,65 @@ type rrb-vector < Struct
             let depth = self.depth
             Struct.__typecall t tree length depth
 
+    # FIXME: megajank
+    fn __repr (self)
+        local s = S""
+        s ..=
+            ..
+                "[count="
+                repr self.length
+                " items="
+        s ..=
+            # TODO: iterator i?
+            loop (i es = 0:u32 S"")
+                if (i < self.length)
+                    repeat (i + 1)
+                        .. es " "
+                            repr (self @ i)
+                else
+                    break es
+        s ..=
+            " ]"
+        s
+
+    # TODO: this is debug stuff, and pretty jank
+    # improve or remove?
+    # inb4 literally stays forever
+    fn compare-reftree (self other)
+        fn inner-compare-reftree (prefix depth nodel noder) (returning void)
+            if (depth == 0)
+                let-unwrap datal nodel data-node
+                let-unwrap datar noder data-node
+                let lenl = (countof datal)
+                let lenr = (countof datar)
+                print (.. prefix (repr datal))
+                print (.. prefix (repr datar))
+            else
+                let-unwrap ptrsl nodel pointer-node
+                let-unwrap ptrsr noder pointer-node
+                let lenl = (countof ptrsl)
+                let lenr = (countof ptrsr)
+                print (.. prefix (repr ptrsl))
+                print (.. prefix (repr ptrsr))
+                let minlen = (min lenl lenr)
+                for i in (range minlen)
+                    this-function (.. prefix (tostring i) " ") (depth - 1) (ptrsl @ i) (ptrsr @ i)
+        if (self.depth != other.depth)
+            print "FIXME: implement different depths"
+        else
+            inner-compare-reftree "" self.depth self.tree other.tree
+
 run
+    # TODO: turn into a bunch of assertions?
+    # test type memoization
     let rrb-vector-i32 = (rrb-vector i32 2)
-    # bunch of lets to showcase persistence
-    # TODO: how do i know it's not copying everything all the time?
+    let rrb-vector-i32-2 = (rrb-vector i32 2)
+    let rrb-vector-i32-3 = (rrb-vector i32 4)
+    print (rrb-vector-i32 == rrb-vector-i32-2)
+    print (rrb-vector-i32 == rrb-vector-i32-3)
+    print (rrb-vector-i32-2 == rrb-vector-i32-3)
+
+    # TODO: refactor
     let my-thing-0 = (rrb-vector-i32)
     let my-thing-1 = ('append my-thing-0 1)
     let my-thing-2 = ('append my-thing-1 2)
@@ -202,6 +255,7 @@ run
     let my-thing-10 = ('append my-thing-9 10)
     let my-thing-11 = ('append my-thing-10 11)
     let my-thing-12 = ('append my-thing-11 12)
+    let my-thing-xd = ('update my-thing-12 0:u32 42)
     'compare-reftree my-thing-5 my-thing-6
     print (repr my-thing-0)
     print (repr my-thing-1)
@@ -216,3 +270,4 @@ run
     print (repr my-thing-10)
     print (repr my-thing-11)
     print (repr my-thing-12)
+    print (repr my-thing-xd)
