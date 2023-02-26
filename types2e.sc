@@ -43,6 +43,12 @@ inline gen-bit-ops (block-width)
 
     locals;
 
+inline copy-contents (x)
+    let rc-type = (typeof x)
+    let x-unwrapped = (x as rc-type.Type)
+    let x-copy = (copy x-unwrapped)
+    Rc.wrap x-copy
+
 type rrb-vector < Struct
     # FIXME: how to return a type of non-mutable data?
     @@ memo
@@ -104,12 +110,12 @@ type rrb-vector < Struct
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node data-node
-                local new-data = (copy data)
+                local new-data = (copy-contents data)
                 (new-data @ i) = element
                 t.rrb-tree.data-node new-data
             else
                 let-unwrap ptrs node pointer-node
-                local new-ptrs = (copy ptrs)
+                local new-ptrs = (copy-contents ptrs)
                 let branch =
                     this-function (ptrs @ i) index (depth - 1) element
                 (new-ptrs @ i) = branch
@@ -123,7 +129,7 @@ type rrb-vector < Struct
     # TODO: mutable when owned
     # TODO: append-front???
     # rn i'm assuming only append-back
-    # TODO: extremely similar to update, with extra handling of edge cases
+    # TODO: very similar to update, with extra handling of edge cases
     # refactor?
     fn append (self element)
         let t = (typeof self)
@@ -149,12 +155,12 @@ type rrb-vector < Struct
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node data-node
-                local new-data = (copy data)
+                local new-data = (copy-contents data)
                 'append new-data element
                 t.rrb-tree.data-node new-data
             else
                 let-unwrap ptrs node pointer-node
-                local new-ptrs = (copy ptrs)
+                local new-ptrs = (copy-contents ptrs)
                 if (t.bit-ops.needs-new-branch index depth)
                     let branch =
                         new-branch (depth - 1) element
