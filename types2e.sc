@@ -43,46 +43,55 @@ inline gen-bit-ops (block-width)
 
     locals;
 
+# TODO: why is Rc annoying
 inline copy-contents (x)
     let rc-type = (typeof x)
     let x-unwrapped = (x as rc-type.Type)
     let x-copy = (copy x-unwrapped)
     Rc.wrap x-copy
 
-type rrb-vector < Struct
-    # FIXME: how to return a type of non-mutable data?
-    @@ memo
-    inline gen-rrb-vector-type (element-type block-width)
-        let bit-ops = (gen-bit-ops block-width)
+typedef RrbVector < Struct
 
-        enum rrb-tree
-        let data-node-type =
-            Rc (FixedArray element-type bit-ops.node-arity)
-        let pointer-node-type =
-            Rc (FixedArray rrb-tree bit-ops.node-arity)
-        enum rrb-tree
-            data-node    : data-node-type
-            pointer-node : pointer-node-type
+# FIXME: how to return a type of non-mutable data?
+@@ memo
+inline gen-type (element-type block-width)
+    let bit-ops = (gen-bit-ops block-width)
 
-        struct rrb-vector < this-type
-            tree   : rrb-tree
-            length : u32
-            depth  : u32
-            # TODO: better way to expose all this?
-            let bit-ops rrb-tree data-node-type pointer-node-type
+    enum RrbTree
 
+    let DataNode =
+        Rc (FixedArray element-type bit-ops.node-arity)
+    let PointerNode =
+        Rc (FixedArray RrbTree bit-ops.node-arity)
+
+    enum RrbTree
+        data-node    : DataNode
+        pointer-node : PointerNode
+
+    struct
+        .. "<RrbVector " (tostring element-type) ">"
+        \ < RrbVector
+
+        tree   : RrbTree
+        length : u32
+        depth  : u32
+
+        # TODO: better way to expose all this?
+        let RrbTree DataNode PointerNode bit-ops
+
+typedef+ RrbVector
     # TODO: less jank way to do this?
     inline... __typecall
     case (cls element-type)
         this-function cls element-type 5
     case (cls element-type block-width)
         static-assert (cls == this-type) "Use 0 args to construct data"
-        gen-rrb-vector-type element-type block-width
+        gen-type element-type block-width
 
     case (cls)
         static-assert (cls != this-type) "Use 1 or 2 args to construct type"
         let tree =
-            cls.rrb-tree.data-node (cls.data-node-type)
+            cls.RrbTree.data-node (cls.DataNode)
         let length = 0
         let depth = 0
         Struct.__typecall cls tree length depth
@@ -106,20 +115,20 @@ type rrb-vector < Struct
     fn update (self index element)
         assert (index < self.length) "update out of bounds!"
         let t = (typeof self)
-        fn update-inner (node index depth element) (returning (uniqueof t.rrb-tree -1))
+        fn update-inner (node index depth element) (returning (uniqueof t.RrbTree -1))
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node data-node
                 local new-data = (copy-contents data)
                 (new-data @ i) = element
-                t.rrb-tree.data-node new-data
+                t.RrbTree.data-node new-data
             else
                 let-unwrap ptrs node pointer-node
                 local new-ptrs = (copy-contents ptrs)
                 let branch =
                     this-function (ptrs @ i) index (depth - 1) element
                 (new-ptrs @ i) = branch
-                t.rrb-tree.pointer-node new-ptrs
+                t.RrbTree.pointer-node new-ptrs
         let tree =
             update-inner self.tree index self.depth element
         let length = self.length
@@ -135,29 +144,29 @@ type rrb-vector < Struct
         let t = (typeof self)
 
         # make a new branch with a given depth and given first element
-        fn new-branch (depth element) (returning (uniqueof t.rrb-tree -1))
+        fn new-branch (depth element) (returning (uniqueof t.RrbTree -1))
             if (depth == 0)
-                local data = (t.data-node-type)
+                local data = (t.DataNode)
                 'append data element
-                t.rrb-tree.data-node data
+                t.RrbTree.data-node data
             else
                 let sub-branch =
                     this-function (depth - 1) element
-                local ptrs = (t.pointer-node-type)
+                local ptrs = (t.PointerNode)
                 'append ptrs sub-branch
-                t.rrb-tree.pointer-node ptrs
+                t.RrbTree.pointer-node ptrs
 
         # at a data node, simply copy and append
         # at a pointer node, check whether the branch being touched exists
         # - if not, create it with new-branch
         # - if yes, descend into it, make a copy and replace the branch
-        fn append-inner (node index depth element) (returning (uniqueof t.rrb-tree -1))
+        fn append-inner (node index depth element) (returning (uniqueof t.RrbTree -1))
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node data-node
                 local new-data = (copy-contents data)
                 'append new-data element
-                t.rrb-tree.data-node new-data
+                t.RrbTree.data-node new-data
             else
                 let-unwrap ptrs node pointer-node
                 local new-ptrs = (copy-contents ptrs)
@@ -169,16 +178,16 @@ type rrb-vector < Struct
                     let branch =
                         this-function (ptrs @ i) index (depth - 1) element
                     (new-ptrs @ i) = branch
-                t.rrb-tree.pointer-node new-ptrs
+                t.RrbTree.pointer-node new-ptrs
 
         # if tree is full, make a new root,
         # put tree under it and then the new element
         if (t.bit-ops.is-tree-full self.length self.depth)
             let branch = (new-branch self.depth element)
-            local ptrs = (t.pointer-node-type)
+            local ptrs = (t.PointerNode)
             'append ptrs (copy self.tree)
             'append ptrs branch
-            let tree = (t.rrb-tree.pointer-node ptrs)
+            let tree = (t.RrbTree.pointer-node ptrs)
             let length = (self.length + 1)
             let depth = (self.depth + 1)
             Struct.__typecall t tree length depth
@@ -232,6 +241,7 @@ type rrb-vector < Struct
                 for i in (range minlen)
                     this-function (.. prefix (tostring i) " ") (depth - 1) (ptrsl @ i) (ptrsr @ i)
         if (self.depth != other.depth)
+            # don't actually
             print "FIXME: implement different depths"
         else
             inner-compare-reftree "" self.depth self.tree other.tree
@@ -239,9 +249,12 @@ type rrb-vector < Struct
 run
     # TODO: turn into a bunch of assertions?
     # test type memoization
-    let rrb-vector-i32 = (rrb-vector i32 2)
-    let rrb-vector-i32-2 = (rrb-vector i32 2)
-    let rrb-vector-i32-3 = (rrb-vector i32 4)
+    let rrb-vector-i32 = (RrbVector i32 2)
+    let rrb-vector-i32-2 = (RrbVector i32 2)
+    let rrb-vector-i32-3 = (RrbVector i32 4)
+    print rrb-vector-i32
+    print rrb-vector-i32-2
+    print rrb-vector-i32-3
     print (rrb-vector-i32 == rrb-vector-i32-2)
     print (rrb-vector-i32 == rrb-vector-i32-3)
     print (rrb-vector-i32-2 == rrb-vector-i32-3)
