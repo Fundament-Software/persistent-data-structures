@@ -26,25 +26,25 @@ inline mask-bits (n x)
         (pow2 n) - 1
     x & mask
 
-inline gen-bit-ops (block-width)
-    let node-arity = (pow2 block-width)
+inline gen-bit-ops (radix-size)
+    let node-arity = (pow2 radix-size)
 
     inline index-at-depth (index depth)
         let index-shift =
-            index >> (block-width * depth)
-        mask-bits block-width index-shift
+            index >> (radix-size * depth)
+        mask-bits radix-size index-shift
 
     inline is-tree-full (count depth)
         let root = (depth + 1)
         # node-arity ** root
         let capacity =
-            pow2 (block-width * root)
+            pow2 (radix-size * root)
         count == capacity
 
     inline needs-new-branch (count depth)
         # is multiple of (node-arity ** depth)
         let remainder =
-            mask-bits (block-width * depth) count
+            mask-bits (radix-size * depth) count
         remainder == 0
 
     locals;
@@ -63,59 +63,59 @@ inline copy-array-slice (a start end)
         'append new-a (a @ i)
     new-a
 
-typedef RrbVector < Struct
+typedef RbVector < Struct
 
 # TODO: how to return a type of non-mutable data?
 # apparently scopes might simply not allow this
 @@ memo
-inline gen-type (element-type count-type block-width)
+inline gen-type (element-type count-type radix-size)
     let depth-type = u8
     #
         depth only needs to have a max value one less than
         the ceil of count-types's bits divided by
-        block-width, so unless you plan on using something
+        radix-size, so unless you plan on using something
         larger than u256 and a block width of 1, or a
         similarly interesting combination, then u8 is fine.
         assertion just to alert when i'm wrong
     static-assert
-        depth-type.MAX >= (((sizeof count-type) - 1) // block-width)
+        depth-type.MAX >= (((sizeof count-type) - 1) // radix-size)
         "depth-type is too short (wtf)"
-    let bit-ops = (gen-bit-ops block-width)
+    let bit-ops = (gen-bit-ops radix-size)
     let count-max = count-type.MAX
 
-    enum RrbTree
+    enum RbTree
 
     let DataNodeType =
         Rc (FixedArray element-type bit-ops.node-arity)
     let PointerNodeType =
-        Rc (FixedArray RrbTree bit-ops.node-arity)
+        Rc (FixedArray RbTree bit-ops.node-arity)
 
-    enum RrbTree
+    enum RbTree
         DataNode    : DataNodeType
         PointerNode : PointerNodeType
 
     struct
-        .. "<RrbVector " (tostring element-type) ">"
-        \ < RrbVector
+        .. "<RbVector " (tostring element-type) ">"
+        \ < RbVector
 
-        root  : RrbTree
+        root  : RbTree
         count : count-type
         depth : depth-type
 
-        let RrbTree DataNodeType PointerNodeType bit-ops count-max
+        let RbTree DataNodeType PointerNodeType bit-ops count-max
 
-typedef+ RrbVector
+typedef+ RbVector
     # TYPECALL
     # TODO: assert is not the place to put these messages
     inline... __typecall
-    case (cls, element-type, count-type = u32, block-width : usize = 5)
+    case (cls, element-type, count-type = u32, radix-size : usize = 5)
         static-assert (cls == this-type) "Use 0 args to construct data"
-        gen-type element-type count-type block-width
+        gen-type element-type count-type radix-size
 
     case (cls)
         static-assert (cls != this-type) "Use 1 or 3 args to construct type"
         let root =
-            cls.RrbTree.DataNode (cls.DataNodeType)
+            cls.RbTree.DataNode (cls.DataNodeType)
         let count = 0
         let depth = 0
         Struct.__typecall cls root count depth
@@ -149,20 +149,20 @@ typedef+ RrbVector
         let count = (countof self)
         assert (index < count) "update out of bounds!"
 
-        fn update-inner (node index depth element) (returning (uniqueof t.RrbTree -1))
+        fn update-inner (node index depth element) (returning (uniqueof t.RbTree -1))
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node DataNode
                 let new-data = (copy-rc-contents data)
                 (new-data @ i) = element
-                t.RrbTree.DataNode new-data
+                t.RbTree.DataNode new-data
             else
                 let-unwrap ptrs node PointerNode
                 let new-ptrs = (copy-rc-contents ptrs)
                 let branch =
                     this-function (ptrs @ i) index (depth - 1) element
                 (new-ptrs @ i) = branch
-                t.RrbTree.PointerNode new-ptrs
+                t.RbTree.PointerNode new-ptrs
 
         let root = (update-inner self.root index self.depth element)
         #let count = self.count
@@ -179,29 +179,29 @@ typedef+ RrbVector
         assert (count < t.count-max) "count-type is about to overflow!"
 
         # make a new branch with a given depth and given first element
-        fn new-branch (depth element) (returning (uniqueof t.RrbTree -1))
+        fn new-branch (depth element) (returning (uniqueof t.RbTree -1))
             if (depth == 0)
                 let data = (t.DataNodeType)
                 'append data element
-                t.RrbTree.DataNode data
+                t.RbTree.DataNode data
             else
                 let sub-branch =
                     this-function (depth - 1) element
                 let ptrs = (t.PointerNodeType)
                 'append ptrs sub-branch
-                t.RrbTree.PointerNode ptrs
+                t.RbTree.PointerNode ptrs
 
         # at a data node, simply copy and append
         # at a pointer node, check whether the branch being touched exists
         # - if not, create it with new-branch
         # - if yes, descend into it, make a copy and replace the branch
-        fn append-inner (node index depth element) (returning (uniqueof t.RrbTree -1))
+        fn append-inner (node index depth element) (returning (uniqueof t.RbTree -1))
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node DataNode
                 let new-data = (copy-rc-contents data)
                 'append new-data element
-                t.RrbTree.DataNode new-data
+                t.RbTree.DataNode new-data
             else
                 let-unwrap ptrs node PointerNode
                 let new-ptrs = (copy-rc-contents ptrs)
@@ -213,7 +213,7 @@ typedef+ RrbVector
                     let branch =
                         this-function (ptrs @ i) index (depth - 1) element
                     (new-ptrs @ i) = branch
-                t.RrbTree.PointerNode new-ptrs
+                t.RbTree.PointerNode new-ptrs
 
         # if tree is full, make a new root,
         # put tree under it and then the new element
@@ -222,7 +222,7 @@ typedef+ RrbVector
             let ptrs = (t.PointerNodeType)
             'append ptrs (copy self.root)
             'append ptrs branch
-            let root = (t.RrbTree.PointerNode ptrs)
+            let root = (t.RbTree.PointerNode ptrs)
             let count = (self.count + 1)
             let depth = (self.depth + 1)
             Struct.__typecall t root count depth
@@ -244,13 +244,13 @@ typedef+ RrbVector
                 let-unwrap data node DataNode
                 let data-count = (countof data)
                 let left = (copy-array-slice data 0 i)
-                let right = (copy-array-slice data i node-count)
-                _ (t.RrbTree.DataNode left) 0 (t.RrbTree.DataNode right) 0
+                let right = (copy-array-slice data i data-count)
+                _ (t.RbTree.DataNode left) 0 (t.RbTree.DataNode right) 0
             else
                 let-unwrap ptrs node PointerNode
                 let ptrs-count = (countof ptrs)
                 let left = (copy-array-slice ptrs 0 i)
-                let right = (copy-array-slice ptrs i node-count)
+                let right = (copy-array-slice ptrs i ptrs-count)
                 let subleft sldepth subright srdepth =
                     this-function (ptrs @ i) index (depth - 1)
 
@@ -303,5 +303,5 @@ typedef+ RrbVector
         inner-reftree "" self.root self.depth
 
 do
-    let RrbVector
+    let RbVector
     locals;
