@@ -6,6 +6,7 @@
 # TODO: investigate possibility of replacing some recursive
 # functions with tail-recursion (therefore, loops) by
 # moving the work of tail code into the next iteration
+# TODO: mutable when owned
 
 # types needed for gen-type
 using import Array
@@ -74,11 +75,11 @@ inline gen-type (element-type count-type radix-size)
         depth only needs to have a max value one less than
         the ceil of count-types's bits divided by
         radix-size, so unless you plan on using something
-        larger than u256 and a block width of 1, or a
+        larger than u256 and a radix size of 1, or a
         similarly interesting combination, then u8 is fine.
         assertion just to alert when i'm wrong
     static-assert
-        depth-type.MAX >= (((sizeof count-type) - 1) // radix-size)
+        ((((sizeof count-type) * 8) - 1) // radix-size) <= depth-type.MAX
         "depth-type is too short (wtf)"
     let bit-ops = (gen-bit-ops radix-size)
     let count-max = count-type.MAX
@@ -99,10 +100,14 @@ inline gen-type (element-type count-type radix-size)
         \ < RbVector
 
         root  : RbTree
-        count : count-type
+        start : count-type
+        count : count-type # FIXME: misnomer! real count is (count - start)
         depth : depth-type
 
         let RbTree DataNodeType PointerNodeType bit-ops count-max
+
+inline new-tree (t root start count depth)
+    Struct.__typecall t root start count depth
 
 typedef+ RbVector
     # TYPECALL
@@ -116,19 +121,19 @@ typedef+ RbVector
         static-assert (cls != this-type) "Use 1 or 3 args to construct type"
         let root =
             cls.RbTree.DataNode (cls.DataNodeType)
-        let count = 0
-        let depth = 0
-        Struct.__typecall cls root count depth
+        new-tree cls root 0 0 0
 
     # COUNTOF
     inline __countof (self)
-        self.count
+        self.count - self.start
 
     # AT
     inline __@ (self index)
         let t = (typeof self)
         let count = (countof self)
         assert (index < count) "@ out of bounds!"
+        let index = (index + self.start)
+
         # loop instead of recursion
         loop (node depth = (deref self.root) (deref self.depth))
             let i = (t.bit-ops.index-at-depth index depth)
@@ -143,11 +148,12 @@ typedef+ RbVector
 
     # UPDATE
     # TODO: is there a proper method name for this?
-    # or like, is set a better name?
+    # or like, is `set` a better name?
     inline update (self index element)
         let t = (typeof self)
         let count = (countof self)
         assert (index < count) "update out of bounds!"
+        let index = (index + self.start)
 
         fn update-inner (node index depth element) (returning (uniqueof t.RbTree -1))
             let i = (t.bit-ops.index-at-depth index depth)
@@ -165,18 +171,22 @@ typedef+ RbVector
                 t.RbTree.PointerNode new-ptrs
 
         let root = (update-inner self.root index self.depth element)
-        #let count = self.count
-        let depth = self.depth
-        Struct.__typecall t root count depth
+        new-tree t root self.start self.count self.depth
 
     # APPEND
-    # TODO: mutable when owned
     # TODO: append-front???
     # rn i'm assuming only append-back
+    # i have conflicting ideas for how to implement append-front
+    # particularly in the case where we need to re-root the tree
+    # do i accept negative indexes?
+    # or do i shift all the existing indexes way over to the right?
+    # if i shift, how much do i shift?
+    # the paper's implementation seems to suggest a shift that
+    # puts the old root in the second child of the root
+    # which i can't imagine being very intuitive (why not the (radix)th?)
     inline append (self element)
         let t = (typeof self)
-        let count = (countof self)
-        assert (count < t.count-max) "count-type is about to overflow!"
+        assert (self.count < t.count-max) "count-type is about to overflow!"
 
         # make a new branch with a given depth and given first element
         fn new-branch (depth element) (returning (uniqueof t.RbTree -1))
@@ -223,14 +233,10 @@ typedef+ RbVector
             'append ptrs (copy self.root)
             'append ptrs branch
             let root = (t.RbTree.PointerNode ptrs)
-            let count = (self.count + 1)
-            let depth = (self.depth + 1)
-            Struct.__typecall t root count depth
+            new-tree t root self.start (self.count + 1) (self.depth + 1)
         else
             let root = (append-inner self.root self.count self.depth element)
-            let count = (self.count + 1)
-            let depth = self.depth
-            Struct.__typecall t root count depth
+            new-tree t root self.start (self.count + 1) self.depth
 
     # SPLIT
     # the rrbvector paper chooses to write this function in
@@ -238,6 +244,10 @@ typedef+ RbVector
     # sides of the split. i choose to return both always
     inline split (self index)
         let t = (typeof self)
+        let count = (countof self)
+        assert (index < count) "split out of bounds!"
+        let index = (index + self.start)
+
         fn split-inner (node index depth)
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
@@ -245,14 +255,22 @@ typedef+ RbVector
                 let data-count = (countof data)
                 let left = (copy-array-slice data 0 i)
                 let right = (copy-array-slice data i data-count)
-                _ (t.RbTree.DataNode left) 0 (t.RbTree.DataNode right) 0
+                _ (t.RbTree.DataNode left) (t.RbTree.DataNode right)
             else
+                # the paper apparently tries to optimize splits that
+                # lie near a branch boundary, but it does so in a
+                # way that causes the tree to become unbalanced so
+                # i'm not implementing that optimization
+                # TODO: it might've been an attempt to optimize
+                # splits near the start/end of the vector
                 let-unwrap ptrs node PointerNode
                 let ptrs-count = (countof ptrs)
                 let left = (copy-array-slice ptrs 0 i)
                 let right = (copy-array-slice ptrs i ptrs-count)
-                let subleft sldepth subright srdepth =
+                let subleft subright =
                     this-function (ptrs @ i) index (depth - 1)
+                'append left subleft
+                (right @ 0) = subright
 
     # TAKE & DROP
     inline take (self index)
