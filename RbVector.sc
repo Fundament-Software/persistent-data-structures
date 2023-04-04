@@ -10,9 +10,11 @@
 
 # types needed for gen-type
 using import Array
+using import Option
 using import Rc
 using import enum
 using import struct
+using import .SparseArray
 
 # TODO: investigate correct usage of String
 using import String
@@ -57,13 +59,6 @@ inline copy-rc-contents (x)
     let x-copy = (copy x-unwrapped)
     Rc.wrap x-copy
 
-# TODO: does Array not support slicing?
-inline copy-array-slice (a start end)
-    let new-a = ((typeof a))
-    for i in (range start end)
-        'append new-a (a @ i)
-    new-a
-
 typedef RbVector < Struct
 
 # TODO: how to return a type of non-mutable data?
@@ -87,9 +82,12 @@ inline gen-type (element-type count-type radix-size)
     enum RbTree
 
     let DataNodeType =
-        Rc (FixedArray element-type bit-ops.node-arity)
-    let PointerNodeType =
-        Rc (FixedArray RbTree bit-ops.node-arity)
+        Rc (SparseArray element-type bit-ops.node-arity)
+
+    struct PointerNodeType
+        #node   : (Rc (SparseArray RbTree bit-ops.node-arity))
+        node   : (Rc (FixedArray RbTree bit-ops.node-arity))
+        counts : (Option (Rc (SparseArray count-type bit-ops.node-arity)))
 
     enum RbTree
         DataNode    : DataNodeType
@@ -128,7 +126,7 @@ typedef+ RbVector
         self.count - self.start
 
     # AT
-    inline __@ (self index)
+    #inline __@ (self index)
         let t = (typeof self)
         let count = (countof self)
         assert (index < count) "@ out of bounds!"
@@ -143,13 +141,13 @@ typedef+ RbVector
             else
                 let-unwrap ptrs node PointerNode
                 repeat
-                    deref (ptrs @ i)
+                    deref (ptrs.node @ i)
                     depth - 1
 
     # UPDATE
     # TODO: is there a proper method name for this?
     # or like, is `set` a better name?
-    inline update (self index element)
+    #inline update (self index element)
         let t = (typeof self)
         let count = (countof self)
         assert (index < count) "update out of bounds!"
@@ -164,10 +162,12 @@ typedef+ RbVector
                 t.RbTree.DataNode new-data
             else
                 let-unwrap ptrs node PointerNode
-                let new-ptrs = (copy-rc-contents ptrs)
                 let branch =
-                    this-function (ptrs @ i) index (depth - 1) element
-                (new-ptrs @ i) = branch
+                    this-function (ptrs.node @ i) index (depth - 1) element
+                let new-ptrs = (copy ptrs)
+                let new-ptrs-node = (copy-rc-contents ptrs.node)
+                'set new-ptrs-node i branch
+                new-ptrs.node = new-ptrs-node
                 t.RbTree.PointerNode new-ptrs
 
         let root = (update-inner self.root index self.depth element)
@@ -184,7 +184,7 @@ typedef+ RbVector
     # the paper's implementation seems to suggest a shift that
     # puts the old root in the second child of the root
     # which i can't imagine being very intuitive (why not the (radix)th?)
-    inline append (self element)
+    #inline append (self element)
         let t = (typeof self)
         assert (self.count < t.count-max) "count-type is about to overflow!"
 
@@ -192,13 +192,13 @@ typedef+ RbVector
         fn new-branch (depth element) (returning (uniqueof t.RbTree -1))
             if (depth == 0)
                 let data = (t.DataNodeType)
-                'append data element
+                'set data 0 element
                 t.RbTree.DataNode data
             else
                 let sub-branch =
                     this-function (depth - 1) element
                 let ptrs = (t.PointerNodeType)
-                'append ptrs sub-branch
+                'set ptrs.node 0 sub-branch
                 t.RbTree.PointerNode ptrs
 
         # at a data node, simply copy and append
@@ -210,19 +210,19 @@ typedef+ RbVector
             if (depth == 0)
                 let-unwrap data node DataNode
                 let new-data = (copy-rc-contents data)
-                'append new-data element
+                'set new-data i element
                 t.RbTree.DataNode new-data
             else
                 let-unwrap ptrs node PointerNode
-                let new-ptrs = (copy-rc-contents ptrs)
-                if (t.bit-ops.needs-new-branch index depth)
-                    let branch =
+                let branch =
+                    if (t.bit-ops.needs-new-branch index depth)
                         new-branch (depth - 1) element
-                    'append new-ptrs branch
-                else
-                    let branch =
-                        this-function (ptrs @ i) index (depth - 1) element
-                    (new-ptrs @ i) = branch
+                    else
+                        this-function (ptrs.node @ i) index (depth - 1) element
+                let new-ptrs = (copy ptrs)
+                let new-ptrs-node = (copy-rc-contents ptrs.node)
+                'set new-ptrs i branch
+                new-ptrs.node = new-ptrs-node
                 t.RbTree.PointerNode new-ptrs
 
         # if tree is full, make a new root,
@@ -230,8 +230,8 @@ typedef+ RbVector
         if (t.bit-ops.is-tree-full self.count self.depth)
             let branch = (new-branch self.depth element)
             let ptrs = (t.PointerNodeType)
-            'append ptrs (copy self.root)
-            'append ptrs branch
+            'set ptrs.node 0 (copy self.root)
+            'set ptrs 1 branch
             let root = (t.RbTree.PointerNode ptrs)
             new-tree t root self.start (self.count + 1) (self.depth + 1)
         else
@@ -242,7 +242,7 @@ typedef+ RbVector
     # the rrbvector paper chooses to write this function in
     # a way that it returns only either the left or right
     # sides of the split. i choose to return both always
-    inline split (self index)
+    #inline split (self index)
         let t = (typeof self)
         let count = (countof self)
         assert (index < count) "split out of bounds!"
@@ -253,8 +253,7 @@ typedef+ RbVector
             if (depth == 0)
                 let-unwrap data node DataNode
                 let data-count = (countof data)
-                let left = (copy-array-slice data 0 i)
-                let right = (copy-array-slice data i data-count)
+                let left right = ('split data i)
                 _ (t.RbTree.DataNode left) (t.RbTree.DataNode right)
             else
                 # the paper apparently tries to optimize splits that
@@ -265,19 +264,18 @@ typedef+ RbVector
                 # splits near the start/end of the vector
                 let-unwrap ptrs node PointerNode
                 let ptrs-count = (countof ptrs)
-                let left = (copy-array-slice ptrs 0 i)
-                let right = (copy-array-slice ptrs i ptrs-count)
+                let left right = ('split ptrs i)
                 let subleft subright =
                     this-function (ptrs @ i) index (depth - 1)
                 'append left subleft
                 (right @ 0) = subright
 
     # TAKE & DROP
-    inline take (self index)
+    #inline take (self index)
         let left _ =
             split self index
         left
-    inline drop (self index)
+    #inline drop (self index)
         let _ right =
             split self index
         right

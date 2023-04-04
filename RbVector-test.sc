@@ -1,5 +1,5 @@
 using import Array
-using import .rbvector
+using import .RbVector
 using import .run
 
 run
