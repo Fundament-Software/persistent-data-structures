@@ -14,7 +14,6 @@ using import Option
 using import Rc
 using import enum
 using import struct
-using import .SparseArray
 
 # TODO: investigate correct usage of String
 using import String
@@ -59,6 +58,13 @@ inline copy-rc-contents (x)
     let x-copy = (copy x-unwrapped)
     Rc.wrap x-copy
 
+# TODO: does Array not support slicing?
+inline copy-array-slice (a start end)
+    let new-a = ((typeof a))
+    for i in (range start end)
+        'append new-a (a @ i)
+    new-a
+
 typedef RbVector < Struct
 
 # TODO: how to return a type of non-mutable data?
@@ -66,28 +72,39 @@ typedef RbVector < Struct
 @@ memo
 inline gen-type (element-type count-type radix-size)
     let depth-type = u8
+    let off-type = u8
     #
         depth only needs to have a max value one less than
         the ceil of count-types's bits divided by
         radix-size, so unless you plan on using something
         larger than u256 and a radix size of 1, or a
         similarly interesting combination, then u8 is fine.
-        assertion just to alert when i'm wrong
+        off-type only needs to have a max value one less
+        than (2 ** radix-size). a radix size of >8 is not
+        as extreme as the edge case for depth-type, but
+        handling it sensibly requires more metaprogramming
+        than i know.
+        assertions just to alert when my mistakes are
+        catching up to me
     static-assert
         ((((sizeof count-type) * 8) - 1) // radix-size) <= depth-type.MAX
         "depth-type is too short (wtf)"
+    static-assert
+        ((2 ** radix-size) - 1) <= off-type.MAX
+        "off-type is too short"
     let bit-ops = (gen-bit-ops radix-size)
     let count-max = count-type.MAX
 
     enum RbTree
 
-    let DataNodeType =
-        Rc (SparseArray element-type bit-ops.node-arity)
+    struct DataNodeType
+        data : (Rc (FixedArray element-type bit-ops.node-arity))
+        off  : off-type
 
     struct PointerNodeType
-        #node   : (Rc (SparseArray RbTree bit-ops.node-arity))
-        node   : (Rc (FixedArray RbTree bit-ops.node-arity))
-        counts : (Option (Rc (SparseArray count-type bit-ops.node-arity)))
+        ptrs   : (Rc (FixedArray RbTree bit-ops.node-arity))
+        counts : (Option (Rc (FixedArray count-type bit-ops.node-arity)))
+        off    : off-type
 
     enum RbTree
         DataNode    : DataNodeType
@@ -99,7 +116,7 @@ inline gen-type (element-type count-type radix-size)
 
         root  : RbTree
         start : count-type
-        count : count-type # FIXME: misnomer! real count is (count - start)
+        end   : count-type
         depth : depth-type
 
         let RbTree DataNodeType PointerNodeType bit-ops count-max
@@ -116,6 +133,7 @@ typedef+ RbVector
         gen-type element-type count-type radix-size
 
     case (cls)
+        # TODO: init-assignment
         static-assert (cls != this-type) "Use 1 or 3 args to construct type"
         let root =
             cls.RbTree.DataNode (cls.DataNodeType)
@@ -123,13 +141,13 @@ typedef+ RbVector
 
     # COUNTOF
     inline __countof (self)
-        self.count - self.start
+        self.end - self.start
 
     # AT
-    #inline __@ (self index)
+    inline... __@ (self, index : usize)
         let t = (typeof self)
         let count = (countof self)
-        assert (index < count) "@ out of bounds!"
+        assert (index < count) "index out of bounds!"
         let index = (index + self.start)
 
         # loop instead of recursion
@@ -137,41 +155,49 @@ typedef+ RbVector
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node DataNode
-                break (data @ i)
+                let i-data = (i - data.off)
+                break (data.data @ i-data)
             else
                 let-unwrap ptrs node PointerNode
+                let i-ptrs = (i - ptrs.off)
                 repeat
-                    deref (ptrs.node @ i)
+                    deref (ptrs.ptrs @ i-ptrs)
                     depth - 1
 
     # UPDATE
     # TODO: is there a proper method name for this?
     # or like, is `set` a better name?
-    #inline update (self index element)
+    inline... update (self, index : usize, element)
         let t = (typeof self)
         let count = (countof self)
-        assert (index < count) "update out of bounds!"
+        assert (index < count) "index out of bounds!"
         let index = (index + self.start)
 
-        fn update-inner (node index depth element) (returning (uniqueof t.RbTree -1))
+        fn update-inner (node index depth element)
+            returning (uniqueof t.RbTree -1)
+
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node DataNode
-                let new-data = (copy-rc-contents data)
-                (new-data @ i) = element
+                let i-data = (i - data.off)
+                let new-data = (copy data)
+                let new-data-node = (copy-rc-contents data.data)
+                (new-data-node @ i-data) = element
+                new-data.data = new-data-node
                 t.RbTree.DataNode new-data
             else
                 let-unwrap ptrs node PointerNode
-                let branch =
-                    this-function (ptrs.node @ i) index (depth - 1) element
+                let i-ptrs = (i - ptrs.off)
+                let sub-branch =
+                    this-function (ptrs.ptrs @ i-ptrs) index (depth - 1) element
                 let new-ptrs = (copy ptrs)
-                let new-ptrs-node = (copy-rc-contents ptrs.node)
-                'set new-ptrs-node i branch
-                new-ptrs.node = new-ptrs-node
+                let new-ptrs-node = (copy-rc-contents ptrs.ptrs)
+                (new-ptrs-node @ i-ptrs) = sub-branch
+                new-ptrs.ptrs = new-ptrs-node
                 t.RbTree.PointerNode new-ptrs
 
         let root = (update-inner self.root index self.depth element)
-        new-tree t root self.start self.count self.depth
+        new-tree t root self.start self.end self.depth
 
     # APPEND
     # TODO: append-front???
@@ -184,59 +210,69 @@ typedef+ RbVector
     # the paper's implementation seems to suggest a shift that
     # puts the old root in the second child of the root
     # which i can't imagine being very intuitive (why not the (radix)th?)
-    #inline append (self element)
+    inline append (self element)
         let t = (typeof self)
-        assert (self.count < t.count-max) "count-type is about to overflow!"
+        assert (self.end < t.count-max) "count-type is about to overflow!"
 
         # make a new branch with a given depth and given first element
-        fn new-branch (depth element) (returning (uniqueof t.RbTree -1))
+        fn new-branch (depth element)
+            returning (uniqueof t.RbTree -1)
+
             if (depth == 0)
                 let data = (t.DataNodeType)
-                'set data 0 element
+                'append data.data element
                 t.RbTree.DataNode data
             else
                 let sub-branch =
                     this-function (depth - 1) element
                 let ptrs = (t.PointerNodeType)
-                'set ptrs.node 0 sub-branch
+                'append ptrs.ptrs sub-branch
                 t.RbTree.PointerNode ptrs
 
         # at a data node, simply copy and append
         # at a pointer node, check whether the branch being touched exists
         # - if not, create it with new-branch
         # - if yes, descend into it, make a copy and replace the branch
-        fn append-inner (node index depth element) (returning (uniqueof t.RbTree -1))
+        fn append-inner (node index depth element)
+            returning (uniqueof t.RbTree -1)
+
             let i = (t.bit-ops.index-at-depth index depth)
             if (depth == 0)
                 let-unwrap data node DataNode
-                let new-data = (copy-rc-contents data)
-                'set new-data i element
+                let i-data = (i - data.off)
+                let new-data = (copy data)
+                let new-data-node = (copy-rc-contents data.data)
+                'append new-data-node element
+                new-data.data = new-data-node
                 t.RbTree.DataNode new-data
             else
                 let-unwrap ptrs node PointerNode
-                let branch =
-                    if (t.bit-ops.needs-new-branch index depth)
-                        new-branch (depth - 1) element
-                    else
-                        this-function (ptrs.node @ i) index (depth - 1) element
+                let i-ptrs = (i - ptrs.off)
                 let new-ptrs = (copy ptrs)
-                let new-ptrs-node = (copy-rc-contents ptrs.node)
-                'set new-ptrs i branch
-                new-ptrs.node = new-ptrs-node
+                let new-ptrs-node = (copy-rc-contents ptrs.ptrs)
+                if (t.bit-ops.needs-new-branch index depth)
+                    let sub-branch =
+                        new-branch (depth - 1) element
+                    'append new-ptrs-node sub-branch
+                else
+                    let sub-branch =
+                        this-function (ptrs.ptrs @ i-ptrs) index (depth - 1) element
+                    (new-ptrs-node @ i-ptrs) = sub-branch
+                new-ptrs.ptrs = new-ptrs-node
                 t.RbTree.PointerNode new-ptrs
 
         # if tree is full, make a new root,
         # put tree under it and then the new element
-        if (t.bit-ops.is-tree-full self.count self.depth)
-            let branch = (new-branch self.depth element)
+        if (t.bit-ops.is-tree-full self.end self.depth)
+            let next-branch = (new-branch self.depth element)
             let ptrs = (t.PointerNodeType)
-            'set ptrs.node 0 (copy self.root)
-            'set ptrs 1 branch
+            'append ptrs.ptrs (copy self.root)
+            'appent ptrs.ptrs next-branch
             let root = (t.RbTree.PointerNode ptrs)
-            new-tree t root self.start (self.count + 1) (self.depth + 1)
+            new-tree t root self.start (self.end + 1) (self.depth + 1)
         else
-            let root = (append-inner self.root self.count self.depth element)
-            new-tree t root self.start (self.count + 1) self.depth
+            let root = (append-inner self.root self.end self.depth element)
+            new-tree t root self.start (self.end + 1) self.depth
 
     # SPLIT
     # the rrbvector paper chooses to write this function in
@@ -245,7 +281,7 @@ typedef+ RbVector
     #inline split (self index)
         let t = (typeof self)
         let count = (countof self)
-        assert (index < count) "split out of bounds!"
+        assert (index < count) "index out of bounds!"
         let index = (index + self.start)
 
         fn split-inner (node index depth)
