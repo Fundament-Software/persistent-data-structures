@@ -42,29 +42,41 @@ inline gen-type (element-type key-type hash-function hash-type map-type index-wi
 
     enum Node-type
 
-    let value-type = (Rc element-type)
+    let value-type = element-type
     struct Key-Value-type
         key   : key-type
         value : value-type
 
     # TODO: growing (up to index-length), not fixed
     # investigate mem usage
-    let base-type = (Rc (FixedArray Node-type index-length))
+    let base-type = (FixedArray Node-type index-length)
     struct Map-Base-type
         map  : map-type
         base : base-type
 
     enum Node-type
-        Key-Value : Key-Value-type
-        Map-Base  : Map-Base-type
+        Key-Value : (Rc Key-Value-type)
+        Map-Base  : (Rc Map-Base-type)
 
     let root-e-type = (Option Node-type)
     let root-type = (FixedArray root-e-type index-length)
+
+    inline mask-bits (n x)
+        let mask =
+            (1 << n) - 1
+        x & mask
+
+    inline index-at-depth (index depth)
+        let index-shift =
+            index >> (index-width * depth)
+        mask-bits index-width index-shift
+
     struct
         .. "<Hamt " (tostring element-type) ">"
         \ < Hamt
         root : root-type
         let hash-function index-length root-e-type root-type
+        let index-at-depth
 
 inline... gen-type-2 (element-type, key-type = u32, hash-function = id, hash-type = u32, map-type = u32, index-width : usize = 5)
     gen-type element-type key-type hash-function hash-type map-type index-width
@@ -84,6 +96,19 @@ typedef+ Hamt
 
     # TODO: is there a proper method name for this?
     inline set (self index element)
+        let cls = (typeof self)
+        let root = self.root
+        let key-hash = (cls.hash-function index)
+        let key-hash-truncated = (cls.index-at-depth key-hash 0)
+        let entry = (root @ key-hash-truncated)
+        dispatch entry
+        case None ()
+            print "none agon"
+        case Some (x)
+            print "some buddy"
+        default
+            assert false "wtf default!?"
+        Struct.__typecall cls (copy root)
 
     inline __repr (self)
 

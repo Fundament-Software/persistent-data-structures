@@ -5,6 +5,21 @@ using import .run
 run
     let hamt-u32 = (Hamt u32)
     let my-hamt = (hamt-u32)
+    let array-t = (Array hamt-u32)
+    local my-array = (array-t)
+    'append my-array my-hamt
+    for i in (range 100)
+        let old-hamt = (my-array @ i)
+        let new-hamt = ('set old-hamt i i)
+        'append my-array new-hamt
+    let my-hamt-first = (my-array @ 0)
+    let my-hamt-last = (my-array @ 100)
+    let my-thing-xd = ('set my-hamt-last 0 42)
+    print (repr my-hamt-first)
+    print (repr my-hamt-last)
+    print (repr my-thing-xd)
+    'print-reftree my-hamt-last
+    'print-reftree my-thing-xd
 
 inline id (x)
     x
