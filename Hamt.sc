@@ -20,8 +20,11 @@ inline id (x)
 
 typedef Hamt < Struct
 
-#@@ memo
-inline... gen-type (element-type, key-type = u32, hash-function = id, hash-type = u32, map-type = u32, index-width : usize = 5)
+# not using because it doesn't correctly memo default arg values
+#let decorate-inline... = decorate-fn
+
+@@ memo
+inline gen-type (element-type key-type hash-function hash-type map-type index-width)
     # element-type is contents of the map
     # key-type is the key into the map
     # hash-function is itself
@@ -63,12 +66,15 @@ inline... gen-type (element-type, key-type = u32, hash-function = id, hash-type 
         root : root-type
         let hash-function index-length root-e-type root-type
 
+inline... gen-type-2 (element-type, key-type = u32, hash-function = id, hash-type = u32, map-type = u32, index-width : usize = 5)
+    gen-type element-type key-type hash-function hash-type map-type index-width
+
 typedef+ Hamt
     inline __typecall (cls etc...)
         static-if (cls == this-type)
-            gen-type etc...
+            gen-type-2 etc...
         else
-            let root = (cls.root-type)
+            local root = (cls.root-type)
             # fill with none
             for i in (range cls.index-length)
                 'append root (cls.root-e-type)
