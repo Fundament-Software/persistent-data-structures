@@ -8,7 +8,7 @@ run
     let array-t = (Array hamt-u32)
     local my-array = (array-t)
     'append my-array my-hamt
-    for i in (range 100)
+    for i in (range 100:u32)
         let old-hamt = (my-array @ i)
         let new-hamt = ('set old-hamt i i)
         'append my-array new-hamt

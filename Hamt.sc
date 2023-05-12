@@ -75,13 +75,15 @@ inline gen-type (element-type key-type hash-function hash-type map-type index-wi
         .. "<Hamt " (tostring element-type) ">"
         \ < Hamt
         root : root-type
-        let hash-function index-length root-e-type root-type
+        let key-type hash-function index-length root-e-type root-type
+        let Node-type Key-Value-type Map-Base-type
         let index-at-depth
 
 inline... gen-type-2 (element-type, key-type = u32, hash-function = id, hash-type = u32, map-type = u32, index-width : usize = 5)
     gen-type element-type key-type hash-function hash-type map-type index-width
 
 typedef+ Hamt
+    # TYPECALL
     inline __typecall (cls etc...)
         static-if (cls == this-type)
             gen-type-2 etc...
@@ -92,23 +94,61 @@ typedef+ Hamt
                 'append root (cls.root-e-type)
             Struct.__typecall cls root
 
+    # AT, GET
     inline __@ (self index)
 
+    # INSERT, SET
     # TODO: is there a proper method name for this?
+    # the gist: hash `index' to get a sequence of tree-indices
+    # index the root; if empty, insert kv; if kv and identical k, replace;
+    # otherwise replace with a new mb
+    # the mb contains the old data and new data merged
+    # the merging is done by descending mbs until getting either kv or nothing
+    # if nothing, ez just insert but be careful to order it properly
+    # if kv and identical, replace;
+    # if not identical, hash the old k, and make new mbs deep enough to no longer collide
+    # then insert old and then new
     inline set (self index element)
         let cls = (typeof self)
         let root = self.root
-        let key-hash = (cls.hash-function index)
+        let key = (index as cls.key-type)
+        let key-hash = (cls.hash-function key)
         let key-hash-truncated = (cls.index-at-depth key-hash 0)
         let entry = (root @ key-hash-truncated)
+        let new-root = (copy root)
         dispatch entry
         case None ()
-            print "none agon"
+            let new-kv =
+                cls.Key-Value-type
+                    key = key
+                    value = element
+            let new-node =
+                cls.Node-type.Key-Value
+                    Rc.wrap new-kv
+            (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
+        #case Some (x)
+            fn set-inner (node key key-hash depth element) (returning (uniqueof cls.Node-type -1))
+                let i = (cls.index-at-depth key-hash depth)
+                dispatch node
+                case Key-Value (kv)
+                case Map-Base (mb)
+                default
+                    assert false "wtf default1?"
+            let new-node = (set-inner x key 1 element)
+            (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
+        # FIXME: stub to test quickly
         case Some (x)
-            print "some buddy"
+            let new-kv =
+                cls.Key-Value-type
+                    key = key
+                    value = element
+            let new-node =
+                cls.Node-type.Key-Value
+                    Rc.wrap new-kv
+            (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
         default
             assert false "wtf default!?"
-        Struct.__typecall cls (copy root)
+        Struct.__typecall cls new-root
 
     inline __repr (self)
 
