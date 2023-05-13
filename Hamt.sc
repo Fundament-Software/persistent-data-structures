@@ -126,18 +126,32 @@ typedef+ Hamt
                 cls.Node-type.Key-Value
                     Rc.wrap new-kv
             (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
-        #case Some (x)
+        case Some (x)
             fn set-inner (node key key-hash depth element) (returning (uniqueof cls.Node-type -1))
                 let i = (cls.index-at-depth key-hash depth)
                 dispatch node
                 case Key-Value (kv)
+                    let old-key = kv.key
+                    let old-value = kv.value
+                    #if (key == old-key)
+                    do
+                        let new-kv =
+                            cls.Key-Value-type
+                                key = key
+                                value = element
+                        let new-node =
+                            cls.Node-type.Key-Value
+                                Rc.wrap new-kv
+                        new-node
+                    #else
+                        assert false "stub!"
                 case Map-Base (mb)
                 default
                     assert false "wtf default1?"
-            let new-node = (set-inner x key 1 element)
+            let new-node = (set-inner x key key-hash 1 element)
             (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
         # FIXME: stub to test quickly
-        case Some (x)
+        #case Some (x)
             let new-kv =
                 cls.Key-Value-type
                     key = key
@@ -150,7 +164,29 @@ typedef+ Hamt
             assert false "wtf default!?"
         Struct.__typecall cls new-root
 
+    # REPR
+    # TODO: convert this into a generic iterator
     inline __repr (self)
+        let cls = (typeof self)
+        let root = self.root
+        local s = S"{ "
+        for i in (range cls.index-length)
+            dispatch (root @ i)
+            case Some (x)
+                s ..= (repr x)
+                s ..= ": "
+                dispatch x
+                case Key-Value (kv)
+                    s ..= (repr kv.key)
+                    s ..= " = "
+                    s ..= (repr kv.value)
+                default
+                    ;
+                s ..= "; "
+            default
+                ;
+        s ..= "}"
+        s
 
     # debugging, might remove later
     inline print-reftree (self)

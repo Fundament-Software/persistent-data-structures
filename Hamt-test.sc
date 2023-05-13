@@ -9,8 +9,9 @@ run
     local my-array = (array-t)
     'append my-array my-hamt
     for i in (range 100:u32)
-        let old-hamt = (my-array @ i)
-        let new-hamt = ('set old-hamt i i)
+        let k = (i % 32)
+        let old-hamt = (my-array @ k)
+        let new-hamt = ('set old-hamt k i)
         'append my-array new-hamt
     let my-hamt-first = (my-array @ 0)
     let my-hamt-last = (my-array @ 100)
