@@ -15,8 +15,42 @@ inline copy-contents (x)
     let x-copy = (copy x-unwrapped)
     Rc.wrap x-copy
 
-inline id (x)
-    x
+inline id-hash (a x)
+    a + x
+
+inline bit-at (a i)
+    (a >> i) & 1
+
+# TODO: optimize
+inline ctpop (a i)
+    local n = 0:usize
+    for x in (range i)
+        n += (bit-at a x)
+    n
+
+inline bit-set (a i)
+    a | (1 << i)
+
+# convenience
+inline node-of-kv (cls key value)
+    let new-kv =
+        cls.Key-Value-type
+            key = key
+            value = value
+    let new-node =
+        cls.Node-type.Key-Value
+            Rc.wrap new-kv
+    new-node
+
+inline node-of-mb (cls map base)
+    let new-mb =
+        cls.Map-Base-type
+            map = map
+            base = base
+    let new-node =
+        cls.Node-type.Map-Base
+            Rc.wrap new-mb
+    new-node
 
 typedef Hamt < Struct
 
@@ -75,11 +109,11 @@ inline gen-type (element-type key-type hash-function hash-type map-type index-wi
         .. "<Hamt " (tostring element-type) ">"
         \ < Hamt
         root : root-type
-        let key-type hash-function index-length root-e-type root-type
+        let key-type hash-function index-length base-type root-e-type root-type
         let Node-type Key-Value-type Map-Base-type
         let index-at-depth
 
-inline... gen-type-2 (element-type, key-type = u32, hash-function = id, hash-type = u32, map-type = u32, index-width : usize = 5)
+inline... gen-type-2 (element-type, key-type = u32, hash-function = id-hash, hash-type = u32, map-type = u32, index-width : usize = 5)
     gen-type element-type key-type hash-function hash-type map-type index-width
 
 typedef+ Hamt
@@ -108,80 +142,121 @@ typedef+ Hamt
     # if kv and identical, replace;
     # if not identical, hash the old k, and make new mbs deep enough to no longer collide
     # then insert old and then new
+    # let's recap:
+    # hash index
+    # hash-index @ 0
+    # get (root @ hash-index-0)
+    # l: if empty then insert kv
+    # if kv and old-k == new-k then replace kv
+    # if kv then new mb and resolve conflict
+    # if mb then hash-index @ n and goto l
+    # TODO: actually handle hash collisions with hash-depth
     inline set (self index element)
         let cls = (typeof self)
         let root = self.root
         let key = (index as cls.key-type)
-        let key-hash = (cls.hash-function key)
+        let key-hash = (cls.hash-function 0 key)
         let key-hash-truncated = (cls.index-at-depth key-hash 0)
-        let entry = (root @ key-hash-truncated)
-        let new-root = (copy root)
-        dispatch entry
-        case None ()
-            let new-kv =
-                cls.Key-Value-type
-                    key = key
-                    value = element
-            let new-node =
-                cls.Node-type.Key-Value
-                    Rc.wrap new-kv
-            (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
-        case Some (x)
-            fn set-inner (node key key-hash depth element) (returning (uniqueof cls.Node-type -1))
-                let i = (cls.index-at-depth key-hash depth)
-                dispatch node
-                case Key-Value (kv)
-                    let old-key = kv.key
-                    let old-value = kv.value
-                    #if (key == old-key)
-                    do
-                        let new-kv =
-                            cls.Key-Value-type
-                                key = key
-                                value = element
+        let old-entry = (root @ key-hash-truncated)
+        let new-entry =
+            do
+                fn resolve-conflict (new-key new-key-hash old-key old-key-hash tree-depth hash-depth new-value old-value) (returning (uniqueof cls.Node-type -1))
+                    let new-i = (cls.index-at-depth new-key-hash tree-depth)
+                    let old-i = (cls.index-at-depth old-key-hash tree-depth)
+                    if (new-i == old-i)
                         let new-node =
-                            cls.Node-type.Key-Value
-                                Rc.wrap new-kv
-                        new-node
-                    #else
-                        assert false "stub!"
-                case Map-Base (mb)
+                            this-function new-key new-key-hash old-key old-key-hash (tree-depth + 1) hash-depth new-value old-value
+                        let map =
+                            (bit-set 0 new-i) as cls.key-type
+                        local base = (cls.base-type)
+                        'append base new-node
+                        node-of-mb cls map base
+                    else
+                        let new-node = (node-of-kv cls new-key new-value)
+                        let old-node = (node-of-kv cls old-key old-value)
+                        let map =
+                            (bit-set (bit-set 0 new-i) old-i) as cls.key-type
+                        local base = (cls.base-type)
+                        if (new-i < old-i)
+                            'append base new-node
+                            'append base old-node
+                        else
+                            'append base old-node
+                            'append base new-node
+                        node-of-mb cls map base
+                fn set-inner (old-node new-key new-key-hash tree-depth hash-depth new-value) (returning (uniqueof cls.Node-type -1)) (raising Error)
+                    dispatch old-node
+                    case Key-Value (kv)
+                        let old-key = kv.key
+                        if (new-key == old-key)
+                            node-of-kv cls new-key new-value
+                        else
+                            let old-key-hash = (cls.hash-function hash-depth old-key)
+                            let old-value = kv.value
+                            resolve-conflict new-key new-key-hash old-key old-key-hash tree-depth hash-depth new-value old-value
+                    case Map-Base (mb)
+                        let i = (cls.index-at-depth new-key-hash tree-depth)
+                        let old-map = mb.map
+                        let old-base = mb.base
+                        let new-map =
+                            (bit-set old-map i) as cls.key-type # idempotent, hopefully
+                        local new-base = (copy old-base)
+                        let base-i = (ctpop old-map i)
+                        if ((bit-at old-map i) == 0)
+                            let new-inner-entry = (node-of-kv cls new-key new-value)
+                            'insert new-base new-inner-entry base-i
+                        else
+                            let old-inner-entry = (old-base @ base-i)
+                            let new-inner-entry =
+                                this-function old-inner-entry new-key new-key-hash (tree-depth + 1) hash-depth new-value
+                            (new-base @ base-i) = new-inner-entry
+                        node-of-mb cls new-map new-base
+                    default
+                        error "wtf default1?"
+                dispatch old-entry
+                case None ()
+                    node-of-kv cls key element
+                case Some (old)
+                    set-inner old key key-hash 1 0:usize element
                 default
-                    assert false "wtf default1?"
-            let new-node = (set-inner x key key-hash 1 element)
-            (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
-        # FIXME: stub to test quickly
-        #case Some (x)
-            let new-kv =
-                cls.Key-Value-type
-                    key = key
-                    value = element
-            let new-node =
-                cls.Node-type.Key-Value
-                    Rc.wrap new-kv
-            (new-root @ key-hash-truncated) = (cls.root-e-type new-node)
-        default
-            assert false "wtf default!?"
+                    error "wtf default!?"
+        let new-root = (copy root)
+        (new-root @ key-hash-truncated) = (cls.root-e-type new-entry)
         Struct.__typecall cls new-root
 
     # REPR
     # TODO: convert this into a generic iterator
+    # lololol this is so bad
     inline __repr (self)
         let cls = (typeof self)
         let root = self.root
         local s = S"{ "
+        fn print-my-ass (node) (returning (uniqueof String -1))
+            local s = S""
+            dispatch node
+            case Key-Value (kv)
+                s ..= (repr kv.key)
+                s ..= " = "
+                s ..= (repr kv.value)
+            case Map-Base (mb)
+                s ..= "["
+                s ..= (tostring mb.map)
+                s ..= "] { "
+                for i in (range (countof mb.base))
+                    s ..= (tostring i)
+                    s ..= ": "
+                    s ..= (this-function (mb.base @ i))
+                    s ..= "; "
+                s ..= "}"
+            default
+                ;
+            s
         for i in (range cls.index-length)
             dispatch (root @ i)
             case Some (x)
                 s ..= (repr x)
                 s ..= ": "
-                dispatch x
-                case Key-Value (kv)
-                    s ..= (repr kv.key)
-                    s ..= " = "
-                    s ..= (repr kv.value)
-                default
-                    ;
+                s ..= (print-my-ass x)
                 s ..= "; "
             default
                 ;
