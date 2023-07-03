@@ -5,8 +5,7 @@ sugar unwrap (var body...)
             case
                 unquote-splice body...
             default
-                assert false "unwrap failed, PANIC!!!"
-                unreachable;
+                error "unwrap failed!!!"
 
 # TODO: more params in brcase?
 sugar let-unwrap (name var brcase)

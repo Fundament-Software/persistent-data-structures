@@ -1,5 +1,5 @@
 using import Array
-using import .rrbvector
+let RrbVector = (import .RrbVector)
 using import .run
 
 run
