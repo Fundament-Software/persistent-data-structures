@@ -22,11 +22,22 @@ let decorate-inline... = decorate-inline
 inline... ceil-div (num : usize, denom : usize)
     ((num - 1) // denom) + 1
 
+inline shl-fix (l r)
+    let t = (typeof l)
+    (l << r) as t
+inline shr-fix (l r)
+    let t = (typeof l)
+    (l >> r) as t
+
+inline... rc-unwrap (rc : Rc)
+    let cls = (typeof rc)
+    rc as cls.Type
+
 @@ memo
 inline... gen-ops (index-type : type, radix-width : usize)
     inline... pow2 (x : usize)
         let one = (1 as index-type)
-        (one << x) as index-type
+        shl-fix one x
 
     let radix-width
     let node-arity = (pow2 radix-width)
@@ -43,9 +54,9 @@ inline... gen-ops (index-type : type, radix-width : usize)
         let without-node = (radix-width * depth)
         let node-index = (mask-bits index with-node)
         let child-index =
-            (node-index >> without-node) as index-type
+            shr-fix node-index without-node
         let subtree-complement =
-            (child-index << without-node) as index-type
+            shl-fix child-index without-node
         let subtree-index = (node-index - subtree-complement)
         _ child-index subtree-index
 
@@ -137,7 +148,9 @@ inline... gen-type-defaults (cls : type, value-type : type, index-type : type = 
 inline... gen-value-with (cls : type, root, count, depth)
     let root = (imply root cls.RrbTree)
     let count = (imply count cls.index-type)
-    let depth = (imply depth cls.depth-storage-type)
+    let depth = (imply depth usize)
+    assert (depth <= cls.depth-storage-type.MAX) "depth-storage-type overflow!!!"
+    let depth = (depth as cls.depth-storage-type)
     Struct.__typecall cls root count depth
 
 # TODO: create with initial data
@@ -154,15 +167,22 @@ typedef RrbVector < Struct
         else
             gen-value cls etc...
 
+    # GETTERS
+    inline... get (self : this-type)
+        _
+            self.root
+            self.count
+            (self.depth as usize)
+
     # COUNTOF, LEN
     inline... __countof (self : this-type)
         self.count
 
-    # AT, GET
+    # AT
     fn... __@ (self : this-type, index)
         let cls = (typeof self)
         let index = (imply index cls.index-type)
-        let count = (countof self)
+        let root count depth = ('get self)
         assert (index < count) "@ out of bounds!"
         # ???
         let value-type = (viewof cls.value-type 1)
@@ -173,7 +193,7 @@ typedef RrbVector < Struct
             if (depth == 0)
                 let-unwrap data node data-node
                 deref
-                    (data @ i) as cls.value-type
+                    rc-unwrap (data @ i)
             else
                 let-unwrap ps node ps-node
                 assert (ps.sizes == cls.SizesNode.None) "@ balanced unbalanced!!!"
@@ -195,7 +215,7 @@ typedef RrbVector < Struct
                 default
                     error "@ default!?"
         #end fn at-inner-unbalanced
-        at-inner-unbalanced self.root index self.depth
+        at-inner-unbalanced root index depth
 
     # UPDATE, SET
     # TODO: is there a magic name for ``(self @ index) = value``?
@@ -203,7 +223,7 @@ typedef RrbVector < Struct
         let cls = (typeof self)
         let index = (imply index cls.index-type)
         let value = (imply value cls.value-type)
-        let count = (countof self)
+        let root count depth = ('get self)
         assert (index < count) "update out of bounds!"
         let rrb-tree = (uniqueof cls.RrbTree -1)
         # children of balanced nodes are always balanced
@@ -250,15 +270,15 @@ typedef RrbVector < Struct
                 default
                     error "update default!?"
         #end fn update-inner-unbalanced
-        let new-root = (update-inner-unbalanced self.root index self.depth value)
-        gen-value-with cls new-root self.count self.depth
+        let new-root = (update-inner-unbalanced root index depth value)
+        gen-value-with cls new-root count depth
 
     # APPEND, PUSHBACK
     # TODO: push-front
     fn... append (self : this-type, value)
         let cls = (typeof self)
         let value = (imply value cls.value-type)
-        let count = (countof self)
+        let root count depth = ('get self)
         assert (count < cls.index-max) "append count overflow!"
         let rrb-tree = (uniqueof cls.RrbTree -1)
         # make a new subtree with a given depth and given first value
@@ -366,21 +386,21 @@ typedef RrbVector < Struct
                 default
                     error "append default!?"
         #end fn append-inner-unbalanced
-        let new-node append unbalanced = (append-inner-unbalanced self.root self.count self.depth value)
+        let new-node append unbalanced = (append-inner-unbalanced root count depth value)
         # if tree is full, make a new root,
         # put tree under it and then the new value
-        if (append and (self.count > 0))
+        if (append and (count > 0))
             local new-ptrs = (cls.PointerNode)
             'append new-ptrs
-                Rc.wrap (copy self.root)
+                Rc.wrap (copy root)
             'append new-ptrs (Rc.wrap new-node)
             # new root may be balanced or unbalanced depending on old root
             let new-ps =
                 do
                     if unbalanced
                         local new-sizes = (cls.ops.sizes-type)
-                        'append new-sizes self.count
-                        'append new-sizes (self.count + 1)
+                        'append new-sizes count
+                        'append new-sizes (count + 1)
                         cls.PSNode
                             ptrs = new-ptrs
                             sizes =
@@ -388,9 +408,9 @@ typedef RrbVector < Struct
                     else
                         cls.PSNode (ptrs = new-ptrs)
             let new-root = (cls.RrbTree.ps-node new-ps)
-            gen-value-with cls new-root (self.count + 1) (self.depth + 1)
+            gen-value-with cls new-root (count + 1) (depth + 1)
         else
-            gen-value-with cls new-node (self.count + 1) self.depth
+            gen-value-with cls new-node (count + 1) depth
 
     # REPR, TOSTRING, PRINT
     fn... __repr (self : this-type)
@@ -409,6 +429,7 @@ typedef RrbVector < Struct
     # debugging
     inline... print-reftree (self : this-type)
         let cls = (typeof self)
+        let root _count depth = ('get self)
         fn... inner-reftree (prefix : String, node : cls.RrbTree, depth : usize)
             returning void
             if (depth == 0)
@@ -430,4 +451,4 @@ typedef RrbVector < Struct
                         this-function (.. prefix (tostring i) " ") (ps.ptrs @ i) (depth - 1)
                 default
                     error "print-reftree default!?"
-        inner-reftree S"" self.root self.depth
+        inner-reftree S"" root depth
