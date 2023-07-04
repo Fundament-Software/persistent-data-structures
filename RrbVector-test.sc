@@ -13,14 +13,25 @@ run
         let new-rrb-vector = ('append old-rrb-vector i)
         'append my-array new-rrb-vector
     let my-rrb-vector-first = (my-array @ 0)
+    let my-rrb-vector-thirty-two = (my-array @ 32)
+    let my-rrb-vector-thirty-three = (my-array @ 33)
     let my-rrb-vector-last = (my-array @ 100)
     let my-thing-xd = ('update my-rrb-vector-last 0:u32 42)
+    print (countof my-rrb-vector-first)
     print (repr my-rrb-vector-first)
+    'print-reftree my-rrb-vector-first
+    print (countof my-rrb-vector-thirty-two)
+    print (repr my-rrb-vector-thirty-two)
+    'print-reftree my-rrb-vector-thirty-two
+    print (countof my-rrb-vector-thirty-three)
+    print (repr my-rrb-vector-thirty-three)
+    'print-reftree my-rrb-vector-thirty-three
+    print (countof my-rrb-vector-last)
     print (repr my-rrb-vector-last)
-    print (repr my-thing-xd)
     'print-reftree my-rrb-vector-last
+    print (countof my-thing-xd)
+    print (repr my-thing-xd)
     'print-reftree my-thing-xd
-    #print (my-thing-11 == my-thing-12)
 
 run
     # test type memoization

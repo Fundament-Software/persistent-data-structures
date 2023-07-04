@@ -4,6 +4,8 @@
 # - properly learn the usage of let/local and inline/fn
 # - make the error messages clearer
 # - tail calls
+# - prepend and split create unbalanced nodes along the left side
+#   possible to avoid?
 
 # types needed for gen-type
 using import Array
@@ -15,37 +17,42 @@ using import struct
 # TODO: investigate correct usage of String
 using import String
 
+let math = (import .math)
 using import .unwrap
 
-let decorate-inline... = decorate-inline
+# TODO: slices? views?
+fn... array-split (a : FixedArray, i : usize)
+    let cls = (typeof a)
+    let count = (countof a)
+    assert (i <= count) "array-split out of bounds!"
 
-inline... ceil-div (num : usize, denom : usize)
-    ((num - 1) // denom) + 1
+    local l = (cls)
+    for n in (range i)
+        'append l (a @ n)
 
-inline shl-fix (l r)
-    let t = (typeof l)
-    (l << r) as t
-inline shr-fix (l r)
-    let t = (typeof l)
-    (l >> r) as t
+    local r = (cls)
+    let j = (count - i)
+    for n in (range j)
+        let m = (n + i)
+        'append r (a @ m)
+
+    _ l r
 
 inline... rc-unwrap (rc : Rc)
     let cls = (typeof rc)
     rc as cls.Type
 
+let decorate-inline... = decorate-inline
+
 @@ memo
 inline... gen-ops (index-type : type, radix-width : usize)
-    inline... pow2 (x : usize)
-        let one = (1 as index-type)
-        shl-fix one x
-
     let radix-width
-    let node-arity = (pow2 radix-width)
+    let node-arity = (math.pow2 index-type radix-width)
     let sizes-type = (FixedArray index-type node-arity)
 
     inline... mask-bits (x : index-type, n : usize)
         let mask =
-            (pow2 n) - 1
+            (math.pow2 index-type n) - 1
         x & mask
 
     inline... get-indexes-balanced (index : index-type, depth : usize)
@@ -53,10 +60,8 @@ inline... gen-ops (index-type : type, radix-width : usize)
             radix-width * (depth + 1)
         let without-node = (radix-width * depth)
         let node-index = (mask-bits index with-node)
-        let child-index =
-            shr-fix node-index without-node
-        let subtree-complement =
-            shl-fix child-index without-node
+        let child-index = (math.shr-fix node-index without-node)
+        let subtree-complement = (math.shl-fix child-index without-node)
         let subtree-index = (node-index - subtree-complement)
         _ child-index subtree-index
 
@@ -103,7 +108,7 @@ inline... gen-type (cls : type, value-type : type, index-type : type, radix-widt
     let index-bits =
         (sizeof index-type) * 8
     static-assert
-        depth-storage-type.MAX >= ((ceil-div index-bits radix-width) - 1)
+        depth-storage-type.MAX >= ((math.ceil-div index-bits radix-width) - 1)
         "depth-storage-type is too short (wtf)"
 
     struct
@@ -135,21 +140,34 @@ inline... gen-type (cls : type, value-type : type, index-type : type, radix-widt
             data-node : DataNode
             ps-node   : PSNode
 
-        let index-max = index-type.MAX
+        let root-type = (Rc RrbTree)
 
-        root  : RrbTree
+        let index-max =
+            do
+                # usize is missing MIN/MAX attributes
+                static-if (index-type == usize)
+                    -1:usize
+                else
+                    index-type.MAX
+
+        root  : root-type
         count : index-type
         depth : depth-storage-type
 
-# @@memo isn't smart enough to figure that omitting optional arguments is the same as explicitly passing the default values
+# @@memo isn't smart enough to figure that omitting optional arguments is the
+# same as explicitly passing the default values.
+# decorators don't support inline... by default though, and defining
+# decorate-inline... to decorate-inline probably isn't helping.
+# so, in some way, this is expected
 inline... gen-type-defaults (cls : type, value-type : type, index-type : type = u32, radix-width : usize = 5)
     gen-type cls value-type index-type radix-width
 
 inline... gen-value-with (cls : type, root, count, depth)
-    let root = (imply root cls.RrbTree)
+    let root = (imply root cls.root-type)
     let count = (imply count cls.index-type)
     let depth = (imply depth usize)
     assert (depth <= cls.depth-storage-type.MAX) "depth-storage-type overflow!!!"
+
     let depth = (depth as cls.depth-storage-type)
     Struct.__typecall cls root count depth
 
@@ -157,7 +175,7 @@ inline... gen-value-with (cls : type, root, count, depth)
 inline... gen-value (cls : type)
     let root =
         cls.RrbTree.data-node (cls.DataNode)
-    gen-value-with cls root 0 0
+    gen-value-with cls (Rc.wrap root) 0 0
 
 typedef RrbVector < Struct
     # TYPECALL
@@ -184,6 +202,7 @@ typedef RrbVector < Struct
         let index = (imply index cls.index-type)
         let root count depth = ('get self)
         assert (index < count) "@ out of bounds!"
+
         # ???
         let value-type = (viewof cls.value-type 1)
         # children of balanced nodes are always balanced
@@ -215,6 +234,7 @@ typedef RrbVector < Struct
                 default
                     error "@ default!?"
         #end fn at-inner-unbalanced
+
         at-inner-unbalanced root index depth
 
     # UPDATE, SET
@@ -225,6 +245,7 @@ typedef RrbVector < Struct
         let value = (imply value cls.value-type)
         let root count depth = ('get self)
         assert (index < count) "update out of bounds!"
+
         let rrb-tree = (uniqueof cls.RrbTree -1)
         # children of balanced nodes are always balanced
         fn... update-inner-balanced (node : cls.RrbTree, index : cls.index-type, depth : usize, value : cls.value-type)
@@ -270,16 +291,18 @@ typedef RrbVector < Struct
                 default
                     error "update default!?"
         #end fn update-inner-unbalanced
+
         let new-root = (update-inner-unbalanced root index depth value)
-        gen-value-with cls new-root count depth
+        gen-value-with cls (Rc.wrap new-root) count depth
 
     # APPEND, PUSHBACK
-    # TODO: push-front
+    # TODO: prepend
     fn... append (self : this-type, value)
         let cls = (typeof self)
         let value = (imply value cls.value-type)
         let root count depth = ('get self)
         assert (count < cls.index-max) "append count overflow!"
+
         let rrb-tree = (uniqueof cls.RrbTree -1)
         # make a new subtree with a given depth and given first value
         fn... gen-new-subtree (depth : usize, value : cls.value-type)
@@ -333,12 +356,13 @@ typedef RrbVector < Struct
         # bool notifies which result happened to the caller
         # second bool notifies whether this node is unbalanced; reduces code duplication for re-root
         # TODO: very evident duplication of leaf and balanced-node cases. refactor?
+        # TODO: if an unbalanced node is found to be balanced, convert?
         fn... append-inner-unbalanced (node : cls.RrbTree, index : cls.index-type, depth : usize, value : cls.value-type)
             returning (_: rrb-tree bool bool)
             if (depth == 0)
                 let _i subindex =
                     cls.ops.get-indexes-balanced index (depth + 1)
-                if (subindex == 0)
+                if (subindex == 0) # needs new subtree
                     _ (gen-new-subtree depth value) true false
                 else
                     _ (append-inner-balanced node index depth value) false false
@@ -379,20 +403,20 @@ typedef RrbVector < Struct
                 case None ()
                     let _i subindex =
                         cls.ops.get-indexes-balanced index (depth + 1)
-                    if (subindex == 0)
+                    if (subindex == 0) # needs new subtree
                         _ (gen-new-subtree depth value) true false
                     else
                         _ (append-inner-balanced node index depth value) false false
                 default
                     error "append default!?"
         #end fn append-inner-unbalanced
+
         let new-node append unbalanced = (append-inner-unbalanced root count depth value)
         # if tree is full, make a new root,
         # put tree under it and then the new value
         if (append and (count > 0))
             local new-ptrs = (cls.PointerNode)
-            'append new-ptrs
-                Rc.wrap (copy root)
+            'append new-ptrs (copy root)
             'append new-ptrs (Rc.wrap new-node)
             # new root may be balanced or unbalanced depending on old root
             let new-ps =
@@ -408,9 +432,55 @@ typedef RrbVector < Struct
                     else
                         cls.PSNode (ptrs = new-ptrs)
             let new-root = (cls.RrbTree.ps-node new-ps)
-            gen-value-with cls new-root (count + 1) (depth + 1)
+            gen-value-with cls (Rc.wrap new-root) (count + 1) (depth + 1)
         else
-            gen-value-with cls new-node (count + 1) depth
+            gen-value-with cls (Rc.wrap new-node) (count + 1) depth
+
+    # TODO: WIP
+    # SPLIT
+    # the rrbvector paper chooses to write this function in a way that it
+    # returns only either the left or right sides of the split.
+    # i choose to return both always
+    fn... split (self : this-type, index)
+        let cls = (typeof self)
+        let index = (imply index cls.index-type)
+        let root count depth = ('get self)
+        assert (index <= count) "split out of bounds!"
+
+        let rrb-tree = (uniqueof cls.RrbTree -1)
+        # children of balanced nodes are always balanced
+        fn... split-inner-balanced (node : cls.RrbTree, index : cls.index-type, depth : usize)
+            returning (_: rrb-tree rrb-tree)
+            let i subindex = (cls.ops.get-indexes-balanced index depth)
+            if (depth == 0)
+                let-unwrap data node DataNode
+                let left right = (array-split data i)
+                _ (cls.RbTree.DataNode left) (cls.RbTree.DataNode right)
+            else
+                # the paper apparently tries to optimize splits that lie near a
+                # branch boundary, but it does so in a way that causes the tree
+                # to have an uneven depth, so i'm not implementing that optimization
+                # TODO: it might've been an attempt to optimize splits near the
+                # start/end of the vector
+                let-unwrap ps node ps-node
+                let left right = (array-split ps.ptrs i)
+                let subleft subright =
+                    this-function (ps.ptrs @ i) subindex (depth - 1)
+                'append left subleft
+                (right @ 0) = subright
+                let new-ps-left =
+                    cls.PSNode (ptrs = left)
+                let new-ps-right =
+                    cls.PSNode (ptrs = right)
+                _ (cls.RrbTree.ps-node new-ps-left) (cls.RrbTree.ps-node new-ps-right)
+
+    # TAKE, DROP, SKIP
+    inline... take (self : this-type, index)
+        let left _ = (split self index)
+        left
+    inline... drop (self : this-type, index)
+        let _ right = (split self index)
+        right
 
     # REPR, TOSTRING, PRINT
     fn... __repr (self : this-type)

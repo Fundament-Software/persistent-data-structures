@@ -31,6 +31,7 @@ inline... gen-type (cls : type, value-type : type, bits-type : type)
     let bits-bits =
         (sizeof bits-type) * 8
     # i'm not sure how else to assert that bits-type is an unsigned integer type
+    # this doesn't work with usize but perhaps don't use usize
     static-assert (bits-type.MIN == 0) "bits-type is not unsigned"
     # TODO: unbounded compile-type ints? or perhaps a safer way to do this check
     #static-assert (bits-type.MAX == ((1:u64 << bits-bits) - 1)) "bits-type is not unsigned"
@@ -48,7 +49,6 @@ inline... gen-type (cls : type, value-type : type, bits-type : type)
         underlying-array : underlying-array-type
         bits : bits-type
 
-# @@memo isn't smart enough to figure that omitted bits-type is the same as specifying u32
 inline... gen-type-defaults (cls : type, value-type : type, bits-type : type = u32)
     gen-type cls value-type bits-type
 
@@ -72,6 +72,7 @@ typedef BsArray < Struct
     fn... __@ (self : this-type, index : usize)
         let cls = (typeof self)
         assert (index < cls.max-length) "@ out of bounds!"
+
         if ((cls.ops.bit-at self.bits index) == 1)
             let count = (cls.ops.ctpop self.bits index)
             Option.wrap (self.underlying-array @ count)
@@ -84,6 +85,7 @@ typedef BsArray < Struct
         let cls = (typeof self)
         let value = (imply value cls.value-type)
         assert (index < cls.max-length) "set out of bounds!"
+
         let count = (cls.ops.ctpop self.bits index)
         if ((cls.ops.bit-at self.bits index) == 1)
             (self.underlying-array @ count) = value
