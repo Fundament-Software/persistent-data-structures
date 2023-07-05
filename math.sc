@@ -44,8 +44,36 @@ inline shr-fix (l r)
     let shr = >>
     shift-fix shr l r
 
+# other useful operations
+
+# bits stuff
+
 inline pow2 (t x)
     shl-fix (1 as t) x
+
+inline bit-at (a i)
+    let shift = (shr-fix a i)
+    shift & 1
+
+inline bit-set (a i)
+    let t = (typeof a)
+    let bit = (pow2 t i)
+    a | bit
+
+# TODO: optimize
+inline ctpop (a i)
+    local n = 0:usize
+    for x in (range i)
+        n += (bit-at a x)
+    n
+
+inline mask-bits (x n)
+    let t = (typeof x)
+    let mask =
+        (pow2 t n) - 1
+    x & mask
+
+# arithmetic stuff
 
 inline ceil-div (l r)
     (div-fix (l - 1) r) + 1

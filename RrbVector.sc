@@ -50,16 +50,11 @@ inline... gen-ops (index-type : type, radix-width : usize)
     let node-arity = (math.pow2 index-type radix-width)
     let sizes-type = (FixedArray index-type node-arity)
 
-    inline... mask-bits (x : index-type, n : usize)
-        let mask =
-            (math.pow2 index-type n) - 1
-        x & mask
-
     inline... get-indexes-balanced (index : index-type, depth : usize)
         let with-node =
             radix-width * (depth + 1)
         let without-node = (radix-width * depth)
-        let node-index = (mask-bits index with-node)
+        let node-index = (math.mask-bits index with-node)
         let child-index = (math.shr-fix node-index without-node)
         let subtree-complement = (math.shl-fix child-index without-node)
         let subtree-index = (node-index - subtree-complement)
@@ -166,9 +161,10 @@ inline... gen-value-with (cls : type, root, count, depth)
     let root = (imply root cls.root-type)
     let count = (imply count cls.index-type)
     let depth = (imply depth usize)
-    assert (depth <= cls.depth-storage-type.MAX) "depth-storage-type overflow!!!"
 
+    assert (depth <= cls.depth-storage-type.MAX) "depth-storage-type overflow!!!"
     let depth = (depth as cls.depth-storage-type)
+
     Struct.__typecall cls root count depth
 
 # TODO: create with initial data

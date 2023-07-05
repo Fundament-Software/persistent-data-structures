@@ -2,29 +2,9 @@ using import Array
 using import Option
 using import struct
 
+let math = (import .math)
+
 let decorate-inline... = decorate-inline
-
-@@ memo
-inline... gen-ops (bits-type : type)
-    inline... bit-at (a : bits-type, i : usize)
-        let shift =
-            (a >> i) as bits-type
-        shift & 1
-
-    # TODO: optimize
-    inline... ctpop (a : bits-type, i : usize)
-        local n = 0:usize
-        for x in (range i)
-            n += (bit-at a x)
-        n
-
-    inline... bit-set (a : bits-type, i : usize)
-        let one = (1 as bits-type)
-        let shift =
-            (one << i) as bits-type
-        shift | a
-
-    locals;
 
 @@ memo
 inline... gen-type (cls : type, value-type : type, bits-type : type)
@@ -34,7 +14,7 @@ inline... gen-type (cls : type, value-type : type, bits-type : type)
     # this doesn't work with usize but perhaps don't use usize
     static-assert (bits-type.MIN == 0) "bits-type is not unsigned"
     # TODO: unbounded compile-type ints? or perhaps a safer way to do this check
-    #static-assert (bits-type.MAX == ((1:u64 << bits-bits) - 1)) "bits-type is not unsigned"
+    #static-assert (bits-type.MAX == ((math.pow2 u64 bits-bits) - 1)) "bits-type is not unsigned"
     # maybe this might work
     static-assert (bits-type.MAX == (-1 as bits-type)) "bits-type is not unsigned"
     struct
@@ -42,7 +22,6 @@ inline... gen-type (cls : type, value-type : type, bits-type : type)
         \ < cls
 
         let value-type
-        let ops = (gen-ops bits-type)
         let underlying-array-type = (GrowingArray value-type)
         let max-length = bits-bits
 
@@ -73,8 +52,8 @@ typedef BsArray < Struct
         let cls = (typeof self)
         assert (index < cls.max-length) "@ out of bounds!"
 
-        if ((cls.ops.bit-at self.bits index) == 1)
-            let count = (cls.ops.ctpop self.bits index)
+        if ((math.bit-at self.bits index) == 1)
+            let count = (math.ctpop self.bits index)
             Option.wrap (self.underlying-array @ count)
         else
             # TODO: infer none?
@@ -86,9 +65,9 @@ typedef BsArray < Struct
         let value = (imply value cls.value-type)
         assert (index < cls.max-length) "set out of bounds!"
 
-        let count = (cls.ops.ctpop self.bits index)
-        if ((cls.ops.bit-at self.bits index) == 1)
+        let count = (math.ctpop self.bits index)
+        if ((math.bit-at self.bits index) == 1)
             (self.underlying-array @ count) = value
         else
-            self.bits = (cls.ops.bit-set self.bits index)
+            self.bits = (math.bit-set self.bits index)
             'insert self.underlying-array value count
