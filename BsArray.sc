@@ -1,5 +1,6 @@
 using import Array
 using import Option
+using import String
 using import struct
 
 let math = (import .math)
@@ -7,35 +8,35 @@ let math = (import .math)
 let decorate-inline... = decorate-inline
 
 @@ memo
-inline... gen-type (cls : type, value-type : type, bits-type : type)
+inline... gen-type (cls : type, Value : type, Bits : type)
     let bits-bits =
-        (sizeof bits-type) * 8
-    # i'm not sure how else to assert that bits-type is an unsigned integer type
+        (sizeof Bits) * 8
+    # i'm not sure how else to assert that Bits is an unsigned integer type
     # this doesn't work with usize but perhaps don't use usize
-    static-assert (bits-type.MIN == 0) "bits-type is not unsigned"
-    # TODO: unbounded compile-type ints? or perhaps a safer way to do this check
-    #static-assert (bits-type.MAX == ((math.pow2 u64 bits-bits) - 1)) "bits-type is not unsigned"
+    static-assert (Bits.MIN == 0) "Bits is not unsigned"
+    # TODO: unbounded compile-time ints? or perhaps a safer way to do this check
+    #static-assert (Bits.MAX == ((math.pow2 u64 bits-bits) - 1)) "Bits is not unsigned"
     # maybe this might work
-    static-assert (bits-type.MAX == (-1 as bits-type)) "bits-type is not unsigned"
+    static-assert (Bits.MAX == (-1 as Bits)) "Bits is not unsigned"
     struct
-        .. "<BsArray " (tostring value-type) ">"
+        .. "<BsArray " (tostring Value) ">"
         \ < cls
 
-        let value-type
-        let underlying-array-type = (GrowingArray value-type)
+        let Value
+        let Underlying-Array = (GrowingArray Value)
         let max-length = bits-bits
 
-        underlying-array : underlying-array-type
-        bits : bits-type
+        underlying-array : Underlying-Array
+        bits : Bits
 
-inline... gen-type-defaults (cls : type, value-type : type, bits-type : type = u32)
-    gen-type cls value-type bits-type
+inline... gen-type-defaults (cls : type, Value : type, Bits : type = u32)
+    gen-type cls Value Bits
 
 # TODO: create with initial data
 inline... gen-value (cls : type)
     Struct.__typecall cls
         bits = 0
-        underlying-array = (cls.underlying-array-type)
+        underlying-array = (cls.Underlying-Array)
 
 # "Bitstring-mapped sparse array"
 typedef BsArray < Struct
@@ -57,12 +58,12 @@ typedef BsArray < Struct
             Option.wrap (self.underlying-array @ count)
         else
             # TODO: infer none?
-            ((Option cls.value-type))
+            ((Option cls.Value))
 
     # TODO: is there a magic name for ``(self @ index) = value``?
     fn... set (self : this-type, index : usize, value)
         let cls = (typeof self)
-        let value = (imply value cls.value-type)
+        let value = (imply value cls.Value)
         assert (index < cls.max-length) "set out of bounds!"
 
         let count = (math.ctpop self.bits index)
@@ -71,3 +72,18 @@ typedef BsArray < Struct
         else
             self.bits = (math.bit-set self.bits index)
             'insert self.underlying-array value count
+
+    fn... __repr (self : this-type)
+        local s = S""
+        s ..= "["
+        s ..= (tostring self.bits)
+        s ..= "] { "
+        let c = (countof self.underlying-array)
+        for i in (range c)
+            s ..= (tostring i)
+            s ..= ": "
+            s ..=
+                repr (self.underlying-array @ i)
+            s ..= "; "
+        s ..= "}"
+        s

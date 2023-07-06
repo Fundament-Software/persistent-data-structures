@@ -1,5 +1,6 @@
 using import Array
-using import .Hamt
+
+let Hamt = (import .Hamt)
 using import .run
 
 run
