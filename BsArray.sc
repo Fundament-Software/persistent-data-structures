@@ -22,7 +22,7 @@ inline... gen-type (cls : type, Value : type, Bits : type)
         .. "<BsArray " (tostring Value) ">"
         \ < cls
 
-        let Value
+        let Value Bits
         let Underlying-Array = (GrowingArray Value)
         let max-length = bits-bits
 
@@ -32,11 +32,14 @@ inline... gen-type (cls : type, Value : type, Bits : type)
 inline... gen-type-defaults (cls : type, Value : type, Bits : type = u32)
     gen-type cls Value Bits
 
+inline... gen-value-with (cls : type, underlying-array, bits)
+    let underlying-array = (imply underlying-array cls.Underlying-Array)
+    let bits = (imply bits cls.Bits)
+    Struct.__typecall cls underlying-array bits
+
 # TODO: create with initial data
 inline... gen-value (cls : type)
-    Struct.__typecall cls
-        bits = 0
-        underlying-array = (cls.Underlying-Array)
+    gen-value-with cls (cls.Underlying-Array) 0
 
 # "Bitstring-mapped sparse array"
 typedef BsArray < Struct
@@ -45,6 +48,10 @@ typedef BsArray < Struct
             gen-type-defaults cls etc...
         else
             gen-value cls etc...
+
+    fn... __copy (self : this-type)
+        let cls = (typeof self)
+        gen-value-with cls (copy self.underlying-array) (copy self.bits)
 
     inline... __countof (self : this-type)
         countof self.underlying-array
@@ -55,7 +62,9 @@ typedef BsArray < Struct
 
         if ((math.bit-at self.bits index) == 1)
             let count = (math.ctpop self.bits index)
-            Option.wrap (self.underlying-array @ count)
+            let value =
+                copy (self.underlying-array @ count)
+            Option.wrap value
         else
             # TODO: infer none?
             ((Option cls.Value))

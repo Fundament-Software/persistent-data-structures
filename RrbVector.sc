@@ -128,12 +128,6 @@ inline... gen-type (cls : type, Value : type, Index : type, radix-width : usize)
         struct PS-Node
             ptrs  : Pointer-Node
             sizes : Sizes-Node
-            # ???
-            # TODO: derive copy
-            fn... __copy (self : this-type)
-                this-type
-                    ptrs = (copy self.ptrs)
-                    sizes = (copy self.sizes)
 
         enum Rrb-Tree
             Data-Node : Data-Node

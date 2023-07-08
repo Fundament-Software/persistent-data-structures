@@ -190,7 +190,7 @@ typedef Hamt < Struct
                     let old-entry = (old-mb @ new-index)
                     let new-entry =
                         this-function old-entry new-key new-value new-hash (tree-depth + 1) hash-depth
-                    let new-mb = (copy old-mb)
+                    local new-mb = (copy old-mb)
                     'set new-mb new-index new-entry
                     Rc.wrap (cls.Node.Map-Base new-mb)
                 default
