@@ -57,6 +57,7 @@ inline... gen-type (cls : type, Value : type, Key : type, hash-function, Hash : 
             Key-Value : Key-Value
             Map-Base  : Map-Base
             fn... __repr (self : this-type)
+                returning (_: (uniqueof String -1))
                 local s = S""
                 dispatch self
                 case Key-Value (kv)
@@ -78,7 +79,7 @@ inline... gen-type (cls : type, Value : type, Key : type, hash-function, Hash : 
         inline... get-index (hash : Hash, depth : usize)
             let hash-shift =
                 math.shr-fix hash (bits-width * depth)
-            math.mask-bits bits-width hash-shift
+            math.mask-bits hash-shift bits-width
 
         root : Root
 
@@ -105,6 +106,10 @@ typedef Hamt < Struct
             gen-type-defaults cls etc...
         else
             gen-value cls etc...
+
+    fn... __copy (self : this-type)
+        let cls = (typeof self)
+        gen-value-with cls (copy self.root)
 
     # AT, GET
     fn... __@ (self : this-type, key)

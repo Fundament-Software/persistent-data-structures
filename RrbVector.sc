@@ -187,6 +187,11 @@ typedef RrbVector < Struct
             self.count
             (self.depth as usize)
 
+    fn... __copy (self : this-type)
+        let cls = (typeof self)
+        let root count depth = ('get self)
+        gen-value-with cls (copy root) count depth
+
     # COUNTOF, LEN
     inline... __countof (self : this-type)
         self.count

@@ -51,7 +51,7 @@ typedef BsArray < Struct
 
     fn... __copy (self : this-type)
         let cls = (typeof self)
-        gen-value-with cls (copy self.underlying-array) (copy self.bits)
+        gen-value-with cls (copy self.underlying-array) self.bits
 
     inline... __countof (self : this-type)
         countof self.underlying-array

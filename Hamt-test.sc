@@ -16,7 +16,7 @@ run
         'append my-array new-hamt
     let my-hamt-first = (my-array @ 0)
     let my-hamt-last = (my-array @ 100)
-    let my-thing-xd = ('set my-hamt-last 0 42:u32)
+    let my-thing-xd = ('set my-hamt-last 0:u32 42:u32)
     print (repr my-hamt-first)
     print (repr my-hamt-last)
     print (repr my-thing-xd)
