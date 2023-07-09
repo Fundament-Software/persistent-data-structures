@@ -7,17 +7,16 @@
 # - prepend and split create unbalanced nodes along the left side
 #   possible to avoid?
 
-# types needed for gen-type
 using import Array
+using import enum
 using import Option
 using import Rc
-using import enum
 # TODO: investigate correct usage of String
 using import String
 using import struct
 
-using import .unwrap
 let math = (import .math)
+using import .unwrap
 
 # TODO: slices? views?
 fn... array-split (a : FixedArray, i : usize)
@@ -207,7 +206,7 @@ typedef RrbVector < Struct
         let value-return = (viewof cls.Value 1)
         # children of balanced nodes are always balanced
         fn... at-inner-balanced (node : cls.Rrb-Tree, index : cls.Index, depth : usize)
-            returning (_: value-return)
+            returning value-return
             let i subindex = (cls.ops.get-indexes-balanced index depth)
             if (depth == 0)
                 let-unwrap data node Data-Node
@@ -219,7 +218,7 @@ typedef RrbVector < Struct
                 this-function (ps.ptrs @ i) subindex (depth - 1)
         #end fn at-inner-balanced
         fn... at-inner-unbalanced (node : cls.Rrb-Tree, index : cls.Index, depth : usize)
-            returning (_: value-return)
+            returning value-return
             if (depth == 0)
                 at-inner-balanced node index depth
             else
@@ -250,7 +249,7 @@ typedef RrbVector < Struct
             uniqueof (Rc cls.Rrb-Tree) -1
         # children of balanced nodes are always balanced
         fn... update-inner-balanced (node : cls.Rrb-Tree, index : cls.Index, depth : usize, value : cls.Value)
-            returning (_: rrb-tree-return)
+            returning rrb-tree-return
             let i subindex = (cls.ops.get-indexes-balanced index depth)
             if (depth == 0)
                 let-unwrap data node Data-Node
@@ -269,7 +268,7 @@ typedef RrbVector < Struct
                 Rc.wrap (cls.Rrb-Tree.PS-Node new-ps)
         #end fn update-inner-balanced
         fn... update-inner-unbalanced (node : cls.Rrb-Tree, index : cls.Index, depth : usize, value : cls.Value)
-            returning (_: rrb-tree-return)
+            returning rrb-tree-return
             if (depth == 0)
                 update-inner-balanced node index depth value
             else
@@ -308,7 +307,7 @@ typedef RrbVector < Struct
             uniqueof (Rc cls.Rrb-Tree) -1
         # make a new subtree with a given depth and given first value
         fn... gen-new-subtree (depth : usize, value : cls.Value)
-            returning (_: rrb-tree-return)
+            returning rrb-tree-return
             if (depth == 0)
                 local new-data = (cls.Data-Node)
                 'append new-data (Rc.wrap value)
@@ -329,7 +328,7 @@ typedef RrbVector < Struct
         # - if yes, descend into it, make a copy and replace the subtree
         # children of balanced nodes are always balanced
         fn... append-inner-balanced (node : cls.Rrb-Tree, index : cls.Index, depth : usize, value : cls.Value)
-            returning (_: rrb-tree-return)
+            returning rrb-tree-return
             let i subindex = (cls.ops.get-indexes-balanced index depth)
             if (depth == 0)
                 let-unwrap data node Data-Node

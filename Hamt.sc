@@ -1,14 +1,13 @@
-# types needed for gen-type
 using import Array
+using import enum
 using import Option
 using import Rc
-using import enum
 using import String
 using import struct
 
-using import .unwrap
-let math = (import .math)
 let BsArray = (import .BsArray)
+let math = (import .math)
+using import .unwrap
 
 fn... simple-hash (value, hash-depth : usize)
     let t = (typeof value)
@@ -57,7 +56,7 @@ inline... gen-type (cls : type, Value : type, Key : type, hash-function, Hash : 
             Key-Value : Key-Value
             Map-Base  : Map-Base
             fn... __repr (self : this-type)
-                returning (_: (uniqueof String -1))
+                returning (uniqueof String -1)
                 local s = S""
                 dispatch self
                 case Key-Value (kv)
@@ -148,7 +147,7 @@ typedef Hamt < Struct
 
         # TODO: much duplication of kv creation
         fn... resolve-conflict (old-node : (Rc cls.Node), old-key : cls.Key, old-hash : cls.Hash, new-key : cls.Key, new-value : cls.Value, new-hash : cls.Hash, tree-depth : usize, hash-depth : usize)
-            returning (_: node-return)
+            returning node-return
             let old-index = (cls.get-index old-hash tree-depth)
             let new-index = (cls.get-index new-hash tree-depth)
             local mb = (cls.Map-Base)
@@ -169,7 +168,7 @@ typedef Hamt < Struct
             Rc.wrap (cls.Node.Map-Base mb)
         #end fn resolve-conflict
         fn... set-inner (old-entry : (Option (Rc cls.Node)), new-key : cls.Key, new-value : cls.Value, new-hash : cls.Hash, tree-depth : usize, hash-depth : usize)
-            returning (_: node-return)
+            returning node-return
             dispatch old-entry
             case None ()
                 let new-kv =
