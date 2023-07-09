@@ -1,24 +1,40 @@
+using import enum
 using import Option
 using import Rc
+using import struct
 
-let Hamt = (import .Hamt)
-using import .run
-using import .unwrap
+inline gen-type-bsarray (Value)
+    struct (.. "<BsArray " (tostring Value) ">")
+        let Value
 
-fn... set (self : Hamt)
-    fn set-inner (old-entry)
+inline gen-type-hamt ()
+    enum Node
+    let MB =
+        gen-type-bsarray (Rc Node)
+    enum Node
+        Map-Base : MB
+    struct "<Hamt-crash>"
+        let MB Node
+        root : MB
+
+fn set-hamt (self)
+    let cls = (typeof self)
+    let o =
+        Option (Rc cls.Node)
+    fn set-inner (entry)
         returning void
-        dispatch old-entry
+        dispatch entry
         case None () ()
-        case Some (old-node)
-            dispatch old-node
-            case Key-Value (old-kv) ()
-            case Map-Base (old-mb)
-                this-function (old-mb @ 0)
+        case Some (node)
+            dispatch node
+            case Map-Base (mb)
+                this-function (o)
             default ()
         default ()
-    set-inner (self.root @ 0)
+    set-inner (o)
 
-run
-    let my-hamt = ((Hamt i32))
-    set my-hamt
+do
+    let my-hamt-cls = (gen-type-hamt)
+    let my-hamt = (my-hamt-cls)
+    set-hamt my-hamt
+    ;
